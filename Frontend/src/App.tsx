@@ -22,6 +22,7 @@ function App() {
     
     switch (user.role) {
       case 'doctor':
+      case 'clinician':
         return "/doctor-dashboard"
       case 'patient':
         return "/patient-dashboard"
@@ -49,7 +50,7 @@ function App() {
         </Route>
         
         {/* Doctor-only routes */}
-        <Route element={<ProtectedRoute allowedRoles={['doctor']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['doctor', 'clinician']} />}>
           <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
         </Route>
       </Route>

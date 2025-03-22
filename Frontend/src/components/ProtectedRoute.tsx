@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 interface ProtectedRouteProps {
-  allowedRoles?: ('admin' | 'doctor' | 'patient')[]
+  allowedRoles?: ('admin' | 'doctor' | 'clinician' | 'patient')[]
 }
 
 const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
@@ -24,6 +24,7 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     // Redirect based on user's role
     switch (user.role) {
       case 'doctor':
+      case 'clinician':
         return <Navigate to="/doctor-dashboard" replace />
       case 'patient':
         return <Navigate to="/patient-dashboard" replace />

@@ -5,7 +5,7 @@ interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'doctor' | 'patient'
+  role: 'admin' | 'doctor' | 'clinician' | 'patient'
 }
 
 interface AuthContextType {
@@ -85,7 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: '123456',
         name: email.split('@')[0],
         email: email,
-        role: email.toLowerCase().includes('doctor') ? 'doctor' : 'patient' // Set role based on email
+        role: email.toLowerCase().includes('doctor') || email.toLowerCase().includes('clinician') ? 'doctor' : 'patient' // Set role based on email
       };
       
       // Create a mock token that contains the user info

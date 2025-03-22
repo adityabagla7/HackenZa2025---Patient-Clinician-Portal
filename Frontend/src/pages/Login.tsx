@@ -377,7 +377,14 @@ const Login = () => {
                 validationSchema={validationSchema}
                 onSubmit={(values, formikBag) => {
                   setUserType('clinician');
-                  handleSubmit(values, formikBag);
+                  // Modify the email to indicate this is a clinician login
+                  const clinicianValues = {
+                    ...values,
+                    email: values.email.includes('@') 
+                      ? values.email.replace('@', '-clinician@') 
+                      : `${values.email}-clinician@example.com`
+                  };
+                  handleSubmit(clinicianValues, formikBag);
                 }}
               >
                 {({ isSubmitting }) => (
