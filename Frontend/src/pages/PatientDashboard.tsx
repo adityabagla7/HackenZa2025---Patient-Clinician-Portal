@@ -604,15 +604,30 @@ const VerifiedBadge = styled.span`
 `
 
 const AIResponseContent = styled.div`
-  font-size: 0.875rem;
-  color: #4a5568;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
   
-  /* Markdown styling */
-  h1, h2, h3, h4, h5, h6 {
-    margin-top: 1rem;
+  pre {
+    background-color: #f5f5f5;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+  }
+  
+  code {
+    background-color: #f5f5f5;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.85em;
+  }
+  
+  h1, h2, h3 {
+    margin-top: 1.5rem;
     margin-bottom: 0.5rem;
     font-weight: 600;
-    line-height: 1.2;
   }
   
   h1 {
@@ -620,77 +635,24 @@ const AIResponseContent = styled.div`
   }
   
   h2 {
-    font-size: 1.25rem;
+    font-size: 1.3rem;
   }
   
   h3 {
     font-size: 1.1rem;
   }
   
-  p {
-    margin-bottom: 0.75rem;
-  }
-  
   ul, ol {
-    margin-left: 1.5rem;
-    margin-bottom: 0.75rem;
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
   }
   
   li {
-    margin-bottom: 0.25rem;
+    margin: 0.25rem 0;
   }
   
-  a {
-    color: #3182ce;
-    text-decoration: underline;
-  }
-  
-  blockquote {
-    border-left: 2px solid #a0aec0;
-    padding-left: 0.75rem;
-    color: #718096;
-    font-style: italic;
-    margin: 0.75rem 0;
-  }
-  
-  code {
-    font-family: monospace;
-    background-color: #e2e8f0;
-    padding: 0.125rem 0.25rem;
-    border-radius: 0.25rem;
-    font-size: 0.875em;
-  }
-  
-  pre {
-    background-color: #2d3748;
-    color: #e2e8f0;
-    padding: 0.75rem;
-    border-radius: 0.25rem;
-    overflow-x: auto;
-    margin: 0.75rem 0;
-  }
-  
-  pre code {
-    background-color: transparent;
-    padding: 0;
-    color: inherit;
-  }
-  
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0.75rem 0;
-  }
-  
-  th, td {
-    border: 1px solid #e2e8f0;
-    padding: 0.5rem;
-    text-align: left;
-  }
-  
-  th {
-    background-color: #f7fafc;
-    font-weight: 600;
+  p {
+    margin: 0.5rem 0;
   }
 `
 
@@ -727,6 +689,62 @@ const NotificationBadge = styled.span`
   margin-left: 0.5rem;
 `
 
+// Simple Markdown renderer component
+const SimpleMarkdown = ({ content }: { content: string }) => {
+  // Function to process markdown text
+  const processMarkdown = (text: string) => {
+    if (!text) return '';
+    
+    // Process code blocks
+    let processedText = text.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
+    
+    // Process inline code
+    processedText = processedText.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Process headers
+    processedText = processedText.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    processedText = processedText.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    processedText = processedText.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    
+    // Process bold
+    processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Process italic
+    processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Process lists
+    processedText = processedText.replace(/^\s*\* (.*$)/gm, '<li>$1</li>');
+    processedText = processedText.replace(/^\s*- (.*$)/gm, '<li>$1</li>');
+    processedText = processedText.replace(/^\s*\d+\. (.*$)/gm, '<li>$1</li>');
+    
+    // Wrap lists with ul/ol
+    processedText = processedText.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    
+    // Process paragraphs - any line that's not already wrapped in an HTML tag
+    processedText = processedText.replace(/^(?!<[a-z]).+$/gm, '<p>$&</p>');
+    
+    // Fix multiple paragraphs
+    processedText = processedText.replace(/<\/p><p>/g, '</p>\n<p>');
+    
+    // Fix nested lists
+    processedText = processedText.replace(/<\/ul><ul>/g, '');
+    
+    return processedText;
+  };
+  
+  return (
+    <div 
+      className="markdown-content"
+      dangerouslySetInnerHTML={{ __html: processMarkdown(content) }}
+      style={{
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        lineHeight: '1.5',
+        color: '#333'
+      }}
+    />
+  );
+};
+
 const PatientDashboard = () => {
   const { user } = useAuth()
   const [prompt, setPrompt] = useState<string>('')
@@ -753,63 +771,122 @@ const PatientDashboard = () => {
   
   // Load prompt history from localStorage on component mount
   useEffect(() => {
+    console.log('Setting up storage event listeners and periodic checks');
+    
+    const handleStorageChangeWithState = (event: StorageEvent) => {
+      if (event.key === 'patientPromptHistory') {
+        console.log('Storage event detected, reloading prompt history');
+        loadPromptHistory();
+      }
+    };
+    
+    const periodicCheck = () => {
+      console.log('Performing periodic localStorage check');
+      loadPromptHistory();
+    };
+    
+    // Initial load
     loadPromptHistory();
     
     // Set up a storage event listener to detect changes made by the doctor
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('storage', handleStorageChangeWithState);
+    
+    // Also set up a periodic check for changes (every 5 seconds)
+    const intervalId = setInterval(periodicCheck, 5000);
     
     // Clean up on unmount
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('storage', handleStorageChangeWithState);
+      clearInterval(intervalId);
     };
   }, []);
-  
-  // Handle storage changes (when doctor approves a response)
-  const handleStorageChange = (event: StorageEvent) => {
-    if (event.key === 'patientPromptHistory') {
-      console.log('Storage event detected, reloading prompt history');
-      loadPromptHistory();
-    }
-  };
   
   // Load prompt history from localStorage
   const loadPromptHistory = () => {
     const savedPrompts = localStorage.getItem('patientPromptHistory');
     
     if (savedPrompts) {
-      const parsedPrompts = JSON.parse(savedPrompts);
-      console.log('Loaded prompts from localStorage:', parsedPrompts);
-      
-      // Process prompts to recreate AttachmentFile objects with preview URLs
-      const promptsWithFiles = parsedPrompts.map((prompt: any) => {
-        // Check if this is a new approved response the user hasn't seen yet
-        if (prompt.isApproved && !seenResponses.has(prompt.id)) {
-          setUnseenResponseCount(prev => prev + 1);
-        }
+      try {
+        const parsedPrompts = JSON.parse(savedPrompts);
+        console.log('Loaded prompts from localStorage:', parsedPrompts);
         
-        if (prompt.attachments && prompt.attachments.length > 0) {
+        // Track if we found any new approved responses
+        let foundNewApprovedResponses = false;
+        
+        // Debug each prompt's approval status
+        parsedPrompts.forEach((item: any) => {
+          // Convert to boolean explicitly
+          const isApproved = item.isApproved === true;
+          console.log(`Prompt ${item.id}: isApproved=${isApproved}, original=${item.isApproved}, type=${typeof item.isApproved}`);
+          
+          // Check if this is a new approved response the user hasn't seen yet
+          if (isApproved && !seenResponses.has(item.id)) {
+            foundNewApprovedResponses = true;
+          }
+        });
+        
+        // Process prompts to recreate AttachmentFile objects with preview URLs
+        const promptsWithFiles = parsedPrompts.map((prompt: any) => {
+          // Explicitly handle isApproved as a boolean
+          const isApproved = prompt.isApproved === true;
+          console.log(`Processing prompt ${prompt.id}, isApproved=${isApproved}, original=${prompt.isApproved}, type=${typeof prompt.isApproved}`);
+          
+          // Count this as an unseen approved response if needed
+          const isNewApproved = isApproved && !seenResponses.has(prompt.id);
+          if (isNewApproved) {
+            console.log(`Prompt ${prompt.id} is a new approved response`);
+          }
+          
+          if (prompt.attachments && prompt.attachments.length > 0) {
+            return {
+              ...prompt,
+              text: prompt.text || prompt.prompt,
+              timestamp: typeof prompt.timestamp === 'string' ? new Date(prompt.timestamp).getTime() : prompt.timestamp,
+              isApproved: isApproved, // Explicitly set as boolean
+              attachments: prompt.attachments.map((att: any) => ({
+                id: att.id || `${Date.now()}-${att.name || att.fileName}`,
+                file: new File([], att.name || att.fileName || 'file', {
+                  type: att.fileType || att.type
+                }),
+                previewUrl: att.previewUrl,
+                type: att.type
+              }))
+            };
+          }
           return {
             ...prompt,
             text: prompt.text || prompt.prompt,
             timestamp: typeof prompt.timestamp === 'string' ? new Date(prompt.timestamp).getTime() : prompt.timestamp,
-            attachments: prompt.attachments.map((att: any) => ({
-              id: att.id || `${Date.now()}-${att.name || att.fileName}`,
-              file: new File([], att.name || att.fileName || 'file', {
-                type: att.fileType || att.type
-              }),
-              previewUrl: att.previewUrl,
-              type: att.type
-            }))
+            isApproved: isApproved // Explicitly set as boolean
           };
-        }
-        return {
-          ...prompt,
-          text: prompt.text || prompt.prompt,
-          timestamp: typeof prompt.timestamp === 'string' ? new Date(prompt.timestamp).getTime() : prompt.timestamp
-        };
-      });
+        });
 
-      setPromptHistory(promptsWithFiles);
+        // Log the processed prompts to verify approval status
+        console.log('Final processed prompts:', promptsWithFiles);
+        
+        // Count unseen approved responses
+        let unseenCount = 0;
+        promptsWithFiles.forEach((item: PromptHistoryItem) => {
+          console.log(`After processing: Prompt ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
+          if (item.isApproved === true && !seenResponses.has(item.id)) {
+            unseenCount++;
+          }
+        });
+        
+        // Update the unseen count
+        setUnseenResponseCount(unseenCount);
+        
+        // If we found new approved responses and user is not on responses tab,
+        // we could play a sound or show a notification here
+        if (foundNewApprovedResponses && activeTab !== 'responses') {
+          console.log("New approved responses found! Notifying user...");
+          // You could play a sound or show a toast notification here
+        }
+
+        setPromptHistory(promptsWithFiles);
+      } catch (error) {
+        console.error('Failed to parse prompt history:', error);
+      }
     }
   };
   
@@ -939,24 +1016,57 @@ const PatientDashboard = () => {
   
   // Helper function to save to localStorage
   const saveToSessionStorage = (history: PromptHistoryItem[]) => {
+    // First get existing data to preserve approved status
+    const existingData = localStorage.getItem('patientPromptHistory');
+    let existingItems: any[] = [];
+    
+    if (existingData) {
+      try {
+        existingItems = JSON.parse(existingData);
+        console.log('Found existing items in localStorage:', existingItems.length);
+      } catch (error) {
+        console.error('Error parsing existing localStorage data:', error);
+      }
+    }
+    
+    // Create a map of existing items by ID for quick lookup
+    const existingMap = new Map();
+    existingItems.forEach(item => {
+      existingMap.set(item.id, item);
+    });
+    
     // Create a simplified version suitable for storage
-    const historyForStorage = history.map(item => ({
-      id: item.id,
-      text: item.text,
-      timestamp: item.timestamp,
-      aiResponse: item.aiResponse,
-      responseStatus: item.responseStatus,
-      isApproved: item.isApproved === true,
-      attachments: item.attachments ? item.attachments.map(a => ({
-        id: a.id,
-        fileName: a.file.name,
-        fileType: a.file.type,
-        type: a.type,
-        previewUrl: a.previewUrl
-      })) : undefined
-    }));
+    const historyForStorage = history.map(item => {
+      // Check if this item exists and is already approved
+      const existingItem = existingMap.get(item.id);
+      const wasApproved = existingItem && existingItem.isApproved === true;
+      
+      // Use the existing approval status if it was true, otherwise use the current one
+      const isApproved = wasApproved || item.isApproved === true;
+      
+      console.log(`Item ${item.id}: wasApproved=${wasApproved}, currentApproval=${item.isApproved}, finalApproval=${isApproved}`);
+      
+      return {
+        id: item.id,
+        text: item.text,
+        timestamp: item.timestamp,
+        aiResponse: item.aiResponse,
+        responseStatus: item.responseStatus,
+        isApproved: isApproved, // Always boolean
+        attachments: item.attachments ? item.attachments.map(a => ({
+          id: a.id,
+          fileName: a.file.name,
+          fileType: a.file.type,
+          type: a.type,
+          previewUrl: a.previewUrl
+        })) : undefined
+      };
+    });
 
     console.log('Saving to localStorage:', historyForStorage);
+    historyForStorage.forEach(item => {
+      console.log(`Saving item ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
+    });
 
     // Use a temp variable to ensure storage event fires
     const historyJson = JSON.stringify(historyForStorage);
@@ -965,7 +1075,13 @@ const PatientDashboard = () => {
     
     // Verify what was saved
     const savedData = localStorage.getItem('patientPromptHistory');
-    console.log('Verified saved data:', savedData ? JSON.parse(savedData) : null);
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      console.log('Verified saved data:', parsedData);
+      parsedData.forEach((item: any) => {
+        console.log(`Saved item ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
+      });
+    }
   }
   
   // Format date for display
@@ -987,7 +1103,7 @@ const PatientDashboard = () => {
   // Add logging right before rendering
   console.log('Current promptHistory state before rendering:', promptHistory);
   promptHistory.forEach(item => {
-    console.log(`Rendering prompt ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}, hasAIResponse=${Boolean(item.aiResponse)}`);
+    console.log(`Rendering prompt ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
   });
   
   // Update the tab click handler to mark responses as seen
@@ -1171,11 +1287,20 @@ const PatientDashboard = () => {
       {activeTab === 'responses' && (
         <Section>
           <SubTitle>Doctor Verified Responses</SubTitle>
-          {promptHistory.some(item => item.isApproved === true) ? (
-            <div>
-              {promptHistory
-                .filter(item => item.isApproved === true)
-                .map((item) => (
+          <div>
+            {(() => {
+              console.log('All prompts before filtering for approved:', promptHistory);
+              console.log('Prompts with approval status:', promptHistory.map(item => 
+                `${item.id}: ${item.isApproved === true ? 'approved' : 'not-approved'} (${typeof item.isApproved})`
+              ));
+              
+              // Filter for approved responses - explicitly use === true for comparison
+              const approvedResponses = promptHistory.filter(item => item.isApproved === true);
+              console.log('Filtered approved responses:', approvedResponses);
+              console.log('Approved count:', approvedResponses.length);
+              
+              if (approvedResponses && approvedResponses.length > 0) {
+                return approvedResponses.map((item) => (
                   <ResponseCard key={item.id}>
                     <ResponseCardHeader>
                       <PromptHistoryDate>
@@ -1219,25 +1344,34 @@ const PatientDashboard = () => {
                           </VerifiedBadge>
                         </AIResponseHeader>
                         
-                        <AIResponseContent data-approved="true">
-                          {item.aiResponse}
-                        </AIResponseContent>
+                        {item.aiResponse && (
+                          <AIResponseContent>
+                            <SimpleMarkdown content={item.aiResponse} />
+                            {!item.aiResponse.includes('*') && !item.aiResponse.includes('#') && 
+                              !item.aiResponse.includes('`') && !item.aiResponse.includes('-') && (
+                              <div>{item.aiResponse}</div>
+                            )}
+                          </AIResponseContent>
+                        )}
                       </AIResponseContainer>
                     </ResponseCardBody>
                   </ResponseCard>
-                ))}
-            </div>
-          ) : (
-            <Card>
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem', color: '#a0aec0' }}>
-                  <FaCommentMedical />
-                </div>
-                <h3 style={{ marginBottom: '0.5rem', color: '#4a5568' }}>No verified responses yet</h3>
-                <p>Your doctor will review and approve responses soon. Please check back later.</p>
-              </div>
-            </Card>
-          )}
+                ));
+              } else {
+                return (
+                  <Card>
+                    <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem', color: '#a0aec0' }}>
+                        <FaCommentMedical />
+                      </div>
+                      <h3 style={{ marginBottom: '0.5rem', color: '#4a5568' }}>No verified responses yet</h3>
+                      <p>Your doctor will review and approve responses soon. Please check back later.</p>
+                    </div>
+                  </Card>
+                );
+              }
+            })()}
+          </div>
         </Section>
       )}
     </div>

@@ -40,45 +40,67 @@ export const getAIResponse = async (prompt: string): Promise<string> => {
 };
 
 // Function to share doctor-approved responses with patients
-export const updateApprovedResponses = (queryId: string, isApproved: boolean) => {
-  console.log(`API: Updating approval status for query ${queryId} to ${isApproved}`);
+export const updateApprovedResponses = (queryId: string, isApproved: boolean): Promise<boolean> => {
+  console.log(`API: Updating approval status for query ${queryId} to ${isApproved}, type: ${typeof isApproved}`);
   
-  try {
-    // Get current history from localStorage
-    const savedPrompts = localStorage.getItem('patientPromptHistory');
-    console.log('API: Current saved prompts:', savedPrompts);
-    
-    if (savedPrompts) {
-      const prompts = JSON.parse(savedPrompts);
+  return new Promise((resolve) => {
+    try {
+      // Get current history from localStorage
+      const savedPrompts = localStorage.getItem('patientPromptHistory');
+      console.log('API: Current saved prompts:', savedPrompts);
       
-      // Update the specific query's approval status
-      const updatedPrompts = prompts.map((prompt: any) => {
-        if (prompt.id === queryId) {
-          console.log(`API: Updating query ${queryId} approval status from ${prompt.isApproved} to ${isApproved}`);
-          return { ...prompt, isApproved: isApproved === true };
+      if (savedPrompts) {
+        const prompts = JSON.parse(savedPrompts);
+        
+        // Debug the parsed prompts
+        prompts.forEach((prompt: any) => {
+          console.log(`API: Prompt ${prompt.id}: isApproved=${prompt.isApproved}, type=${typeof prompt.isApproved}`);
+        });
+        
+        // Update the specific query's approval status
+        const updatedPrompts = prompts.map((prompt: any) => {
+          if (prompt.id === queryId) {
+            console.log(`API: Updating query ${queryId} approval status from ${prompt.isApproved} to ${isApproved}`);
+            // Ensure isApproved is boolean
+            return { ...prompt, isApproved: isApproved === true };
+          }
+          // Ensure all other items maintain proper boolean isApproved
+          return { ...prompt, isApproved: prompt.isApproved === true };
+        });
+        
+        const updatedPrompt = updatedPrompts.find((p: any) => p.id === queryId);
+        console.log(`API: Updated prompt ${queryId}:`, updatedPrompt);
+        console.log(`API: isApproved type: ${typeof updatedPrompt?.isApproved}`);
+        
+        // Save back to localStorage - we need to use a temporary variable first
+        // to ensure the storage event is fired for different windows/tabs
+        const updatedPromptsJson = JSON.stringify(updatedPrompts);
+        
+        localStorage.removeItem('patientPromptHistory');
+        localStorage.setItem('patientPromptHistory', updatedPromptsJson);
+        
+        // Verify the saved data
+        const savedData = localStorage.getItem('patientPromptHistory');
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          const savedQuery = parsedData.find((p: any) => p.id === queryId);
+          console.log(`API: Verified saved query ${queryId}:`, savedQuery);
+          console.log(`API: Saved isApproved type: ${typeof savedQuery?.isApproved}`);
         }
-        return prompt;
-      });
+        
+        console.log('API: Successfully updated localStorage');
+        
+        // In a real application, this would be sent to the backend via an API call
+        resolve(true);
+        return;
+      }
       
-      console.log('API: Updated prompt:', updatedPrompts.find((p: any) => p.id === queryId));
-      
-      // Save back to localStorage - we need to use a temporary variable first
-      // to ensure the storage event is fired for different windows/tabs
-      const updatedPromptsJson = JSON.stringify(updatedPrompts);
-      
-      localStorage.removeItem('patientPromptHistory');
-      localStorage.setItem('patientPromptHistory', updatedPromptsJson);
-      
-      console.log('API: Successfully updated localStorage');
-      
-      // In a real application, this would be sent to the backend via an API call
-      return true;
+      resolve(false);
+    } catch (error) {
+      console.error('Error updating approval status:', error);
+      resolve(false);
     }
-  } catch (error) {
-    console.error('Error updating approval status:', error);
-  }
-  
-  return false;
+  });
 };
 
 export default apiClient; 

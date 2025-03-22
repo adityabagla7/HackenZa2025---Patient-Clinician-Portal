@@ -639,7 +639,7 @@ const ResponseStatusBadge = styled.span<{ status: 'loading' | 'success' | 'error
   }};
 `
 
-// Add a success message component
+// Update the SuccessMessage component to be more visible
 const SuccessMessage = styled.div`
   margin-top: 0.75rem;
   padding: 0.75rem;
@@ -650,7 +650,118 @@ const SuccessMessage = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  border: 1px solid #38a169;
+  font-weight: 500;
 `
+
+// Simple Markdown renderer component 
+const SimpleMarkdown = ({ content }: { content: string }) => {
+  // Function to process markdown text
+  const processMarkdown = (text: string) => {
+    if (!text) return '';
+    
+    // Process code blocks
+    let processedText = text.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
+    
+    // Process inline code
+    processedText = processedText.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Process headers
+    processedText = processedText.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    processedText = processedText.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    processedText = processedText.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    
+    // Process bold
+    processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Process italic
+    processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Process lists
+    processedText = processedText.replace(/^\s*\* (.*$)/gm, '<li>$1</li>');
+    processedText = processedText.replace(/^\s*- (.*$)/gm, '<li>$1</li>');
+    processedText = processedText.replace(/^\s*\d+\. (.*$)/gm, '<li>$1</li>');
+    
+    // Wrap lists with ul/ol
+    processedText = processedText.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    
+    // Process paragraphs - any line that's not already wrapped in an HTML tag
+    processedText = processedText.replace(/^(?!<[a-z]).+$/gm, '<p>$&</p>');
+    
+    // Fix multiple paragraphs
+    processedText = processedText.replace(/<\/p><p>/g, '</p>\n<p>');
+    
+    // Fix nested lists
+    processedText = processedText.replace(/<\/ul><ul>/g, '');
+    
+    return processedText;
+  };
+  
+  return (
+    <div 
+      className="markdown-content"
+      dangerouslySetInnerHTML={{ __html: processMarkdown(content) }}
+      style={{
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        lineHeight: '1.5',
+        color: '#333'
+      }}
+    />
+  );
+};
+
+// Update response styling
+const ResponseText = styled.div`
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  
+  pre {
+    background-color: #f5f5f5;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+  }
+  
+  code {
+    background-color: #f5f5f5;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.85em;
+  }
+  
+  h1, h2, h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  
+  h1 {
+    font-size: 1.5rem;
+  }
+  
+  h2 {
+    font-size: 1.3rem;
+  }
+  
+  h3 {
+    font-size: 1.1rem;
+  }
+  
+  ul, ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+  }
+  
+  li {
+    margin: 0.25rem 0;
+  }
+  
+  p {
+    margin: 0.5rem 0;
+  }
+`;
 
 const DoctorDashboard = () => {
   const { user } = useAuth()
@@ -688,7 +799,8 @@ const DoctorDashboard = () => {
   ])
   
   // Inside DoctorDashboard component, add state for approval feedback
-  const [approvedQuery, setApprovedQuery] = useState<string | null>(null)
+  const [approvedQueries, setApprovedQueries] = useState<Set<string>>(new Set())
+  const [successMessage, setSuccessMessage] = useState<string>('')
   
   // Load patient queries from localStorage
   useEffect(() => {
@@ -729,93 +841,125 @@ const DoctorDashboard = () => {
   };
 
   // Save updated queries to localStorage
-  const saveQueriesToLocalStorage = () => {
-    // Create a simplified version without file objects
-    const simplifiedQueries = patientQueries.map(query => {
-      // Explicitly ensure isApproved is a boolean
-      const isApproved = query.isApproved === true;
-      
-      return {
-        id: query.id,
-        text: query.text,
-        timestamp: query.timestamp,
-        patientName: query.patientName,
-        aiResponse: query.aiResponse,
-        responseStatus: query.responseStatus,
-        isApproved: isApproved,
-        attachments: query.attachments ? query.attachments.map(a => ({
-          id: a.id,
-          fileName: a.fileName,
-          fileType: a.fileType,
-          type: a.type
-        })) : undefined
-      };
+  const saveQueriesToLocalStorage = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      try {
+        // Create a simplified version without file objects
+        const simplifiedQueries = patientQueries.map(query => {
+          // Explicitly ensure isApproved is a boolean true or false, not undefined or string
+          const isApproved = query.isApproved === true;
+          
+          // Make a copy to avoid reference issues
+          const result = {
+            id: query.id,
+            text: query.text,
+            timestamp: query.timestamp,
+            patientName: query.patientName,
+            aiResponse: query.aiResponse,
+            responseStatus: query.responseStatus,
+            isApproved: isApproved, // Always a boolean
+            attachments: query.attachments ? query.attachments.map(a => ({
+              id: a.id,
+              fileName: a.fileName,
+              fileType: a.fileType,
+              type: a.type
+            })) : undefined
+          };
+          
+          console.log(`Preparing query ${query.id} for storage, isApproved: ${isApproved}, type: ${typeof isApproved}`);
+          
+          return result;
+        });
+        
+        console.log('Saving to localStorage:', simplifiedQueries);
+        
+        // Store in localStorage - make sure to use remove/set pattern
+        // to ensure storage events fire properly
+        const queriesJson = JSON.stringify(simplifiedQueries);
+        localStorage.removeItem('patientPromptHistory');
+        localStorage.setItem('patientPromptHistory', queriesJson);
+        
+        // Verify what was saved
+        const savedData = localStorage.getItem('patientPromptHistory');
+        const parsed = savedData ? JSON.parse(savedData) : null;
+        console.log('Verified saved data:', parsed);
+        
+        // Double check that the approved status was saved correctly
+        if (parsed) {
+          for (const item of parsed) {
+            console.log(`Stored query ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
+          }
+        }
+        
+        // Resolve the promise with success
+        resolve(true);
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+        resolve(false);
+      }
     });
-    
-    console.log('Saving to localStorage:', simplifiedQueries);
-    
-    // Store in localStorage - make sure to use remove/set pattern
-    // to ensure storage events fire properly
-    const queriesJson = JSON.stringify(simplifiedQueries);
-    localStorage.removeItem('patientPromptHistory');
-    localStorage.setItem('patientPromptHistory', queriesJson);
-    
-    // Verify what was saved
-    const savedData = localStorage.getItem('patientPromptHistory');
-    console.log('Verified saved data:', savedData ? JSON.parse(savedData) : null);
   }
   
-  // Update the handleApproveResponse function
+  // Handle approve AI response
   const handleApproveResponse = async (queryId: string) => {
-    console.log(`Doctor approving response for query ${queryId}`)
-    
     try {
-      // Find the query to approve
-      const queryToApprove = patientQueries.find(q => q.id === queryId)
+      console.log(`Approving response for query ${queryId}`);
       
-      if (!queryToApprove) {
-        console.error(`Query with ID ${queryId} not found`)
-        return
+      // Find the query to approve
+      const queryToUpdate = patientQueries.find(q => q.id === queryId);
+      if (!queryToUpdate) {
+        console.error(`Query with ID ${queryId} not found`);
+        return;
       }
       
-      // Update the query
-      const updatedQuery = { ...queryToApprove, isApproved: true }
-      console.log('Updated query:', updatedQuery)
+      // Update the query in our local state
+      const updatedQueries = patientQueries.map(query => 
+        query.id === queryId 
+          ? { ...query, isApproved: true } 
+          : query
+      );
       
-      // Update the entire queries array
-      const updatedQueries = patientQueries.map(q => 
-        q.id === queryId ? updatedQuery : q
-      )
+      setPatientQueries(updatedQueries);
       
-      // Update state
-      setPatientQueries(updatedQueries)
-      setApprovedQuery(queryId)
+      // Add this query to our approvedQueries state
+      setApprovedQueries(prev => new Set(prev).add(queryId));
       
-      // Then update the shared localStorage data to make it available to the patient
-      saveQueriesToLocalStorage()
+      // Save this update to localStorage and API
+      console.log(`Sending approval to API for query ${queryId}`);
+      const apiResult = await updateApprovedResponses(queryId, true);
       
-      console.log('Doctor approval complete, saved to localStorage')
+      if (!apiResult) {
+        console.error('API service failed to update approval status');
+      }
       
-      // Verify what was saved
-      const savedPrompts = localStorage.getItem('patientPromptHistory')
-      console.log('Verified saved data after approval:', savedPrompts ? JSON.parse(savedPrompts) : null)
+      // Save to localStorage - make sure to await this
+      console.log('Saving updated queries to localStorage...');
+      const saveResult = await saveQueriesToLocalStorage();
       
-      // Auto-dismiss success message after 5 seconds
+      if (!saveResult) {
+        console.error('Failed to save to localStorage');
+      }
+      
+      console.log(`Response for query ${queryId} has been approved successfully`);
+      
+      // Show success message
+      setSuccessMessage(`Response approved! Patients can now see it in the "Responses to Queries" tab`);
+      
+      // Hide the success message after 5 seconds
       setTimeout(() => {
-        setApprovedQuery(null)
-      }, 5000)
-      
+        setSuccessMessage('');
+      }, 5000);
     } catch (error) {
-      console.error('Error approving response:', error)
+      console.error('Error approving response:', error);
     }
-  }
+  };
   
   const handleTaskToggle = (taskId: string) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId ? { ...task, completed: !task.completed } : task
       )
-    )
+    );
   }
   
   // Format date for display
@@ -920,17 +1064,20 @@ const DoctorDashboard = () => {
                               <ResponseStatusBadge status="success">Doctor Approved</ResponseStatusBadge>
                             )}
                           </GeminiResponseTitle>
+                          {/* Response Status */}
                           {query.responseStatus === 'loading' && <GeminiResponseText>Analyzing patient query...</GeminiResponseText>}
                           {query.responseStatus === 'error' && <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>}
                           {query.responseStatus === 'success' && query.aiResponse && (
-                            <GeminiResponseText>{query.aiResponse}</GeminiResponseText>
+                            <ResponseText>
+                              <SimpleMarkdown content={query.aiResponse || ''} />
+                            </ResponseText>
                           )}
                           
                           {/* Show success message after approval */}
-                          {approvedQuery === query.id && (
+                          {approvedQueries.has(query.id) && (
                             <SuccessMessage>
                               <FaCheckCircle />
-                              Response approved successfully. The patient will see this in the "Responses to Queries" tab.
+                              Response approved! Patients can now see it in the "Responses to Queries" tab.
                             </SuccessMessage>
                           )}
                         </GeminiResponseContainer>
