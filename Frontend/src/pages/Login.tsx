@@ -1,4 +1,3 @@
-import { GoogleLogin } from '@react-oauth/google'
 import { ErrorMessage, Field, Form, Formik } from 'formik'
 import { useState } from 'react'
 import { FaEnvelope, FaHospital, FaLock } from 'react-icons/fa'
@@ -225,48 +224,11 @@ const AlertMessage = styled.div<{ type: 'error' | 'success' }>`
   color: ${({ type }) => (type === 'error' ? '#c53030' : '#2f855a')};
 `
 
-const Divider = styled.div`
-  display: flex;
-  align-items: center;
-  margin: 1.5rem 0;
-  color: #a0aec0;
-  font-size: 0.875rem;
-  
-  &::before, &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background-color: #e2e8f0;
-  }
-  
-  span {
-    padding: 0 1rem;
-  }
-`
-
-const GoogleButton = styled.div`
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
-`
-
-const ErrorContainer = styled.div`
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 0.375rem;
-  background-color: #fed7d7;
-  color: #c53030;
-  font-size: 0.875rem;
-`
-
 const Login = () => {
-  const { login, googleLogin, error: authError } = useAuth()
+  const { login, error } = useAuth()
   const navigate = useNavigate()
   const [loginSuccess, setLoginSuccess] = useState(false)
   const [userType, setUserType] = useState<'patient' | 'clinician'>('patient')
-  const [googleLoginError, setGoogleLoginError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   
   // Form validation schema
   const validationSchema = Yup.object().shape({
@@ -286,48 +248,24 @@ const Login = () => {
   
   // Handle form submission
   const handleSubmit = async (values: { email: string, password: string }, { setSubmitting }: any) => {
-    setGoogleLoginError(null);
     try {
-      // If logging in as clinician, make sure the email includes 'doctor' so the role is set correctly
-      let email = values.email;
-      if (userType === 'clinician' && !email.toLowerCase().includes('doctor')) {
-        // If the email doesn't contain 'doctor', we'll use the original email with doctor- prefix
-        // to ensure the role gets set correctly in the AuthContext
-        email = `doctor-${email}`;
-      }
-
-      await login(email, values.password)
+      await login(values.email, values.password)
       setLoginSuccess(true)
       
-      // The navigation will now be handled by the App component's route protection
-      // No need for manual navigation based on user type
+      // Navigate to dashboard after a short delay
+      setTimeout(() => {
+        if (userType === 'clinician') {
+          navigate('/doctor-dashboard')
+        } else {
+          navigate('/patient-dashboard')
+        }
+      }, 1000)
     } catch (err) {
       // Error handled in AuthContext
     } finally {
       setSubmitting(false)
     }
   }
-
-  // Handle Google login
-  const handleGoogleSuccess = async (credentialResponse: any) => {
-    setGoogleLoginError(null);
-    setIsLoading(true);
-    try {
-      // Pass the user type along with the credential response
-      await googleLogin(credentialResponse, userType);
-      setLoginSuccess(true);
-      // The App component will handle the redirect based on user role
-    } catch (err: any) {
-      // Display error message
-      setGoogleLoginError(err.message || 'Google login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleError = () => {
-    setGoogleLoginError('Google login failed. Please try again.');
-  };
   
   return (
     <LoginContainer>
@@ -354,28 +292,10 @@ const Login = () => {
             <LoginFormContainer>
               <FormTitle>Patient Login</FormTitle>
               
-              {authError && userType === 'patient' && <AlertMessage type="error">{authError}</AlertMessage>}
-              {googleLoginError && userType === 'patient' && <ErrorContainer>{googleLoginError}</ErrorContainer>}
+              {error && userType === 'patient' && <AlertMessage type="error">{error}</AlertMessage>}
               {loginSuccess && userType === 'patient' && (
                 <AlertMessage type="success">Login successful! Redirecting...</AlertMessage>
               )}
-
-              <GoogleButton onClick={() => setUserType('patient')}>
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  text="signin_with"
-                  shape="pill"
-                  theme="filled_blue"
-                  logo_alignment="center"
-                  useOneTap
-                  disabled={isLoading}
-                />
-              </GoogleButton>
-
-              <Divider>
-                <span>OR</span>
-              </Divider>
               
               <Formik
                 initialValues={initialValues}
@@ -423,7 +343,7 @@ const Login = () => {
                       </ErrorMessage>
                     </FormGroup>
                     
-                    <Button type="submit" disabled={isSubmitting || isLoading}>
+                    <Button type="submit" disabled={isSubmitting}>
                       {isSubmitting && userType === 'patient' ? 'Signing in...' : 'Sign in as Patient'}
                     </Button>
                   </Form>
@@ -449,28 +369,10 @@ const Login = () => {
             <LoginFormContainer>
               <FormTitle>Clinician Login</FormTitle>
               
-              {authError && userType === 'clinician' && <AlertMessage type="error">{authError}</AlertMessage>}
-              {googleLoginError && userType === 'clinician' && <ErrorContainer>{googleLoginError}</ErrorContainer>}
+              {error && userType === 'clinician' && <AlertMessage type="error">{error}</AlertMessage>}
               {loginSuccess && userType === 'clinician' && (
                 <AlertMessage type="success">Login successful! Redirecting...</AlertMessage>
               )}
-
-              <GoogleButton onClick={() => setUserType('clinician')}>
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  text="signin_with"
-                  shape="pill"
-                  theme="filled_blue"
-                  logo_alignment="center"
-                  useOneTap
-                  disabled={isLoading}
-                />
-              </GoogleButton>
-
-              <Divider>
-                <span>OR</span>
-              </Divider>
               
               <Formik
                 initialValues={initialValues}
@@ -518,7 +420,7 @@ const Login = () => {
                       </ErrorMessage>
                     </FormGroup>
                     
-                    <Button type="submit" disabled={isSubmitting || isLoading}>
+                    <Button type="submit" disabled={isSubmitting}>
                       {isSubmitting && userType === 'clinician' ? 'Signing in...' : 'Sign in as Clinician'}
                     </Button>
                   </Form>

@@ -1,5 +1,4 @@
 import axios from 'axios'
-import jwtDecode from 'jwt-decode'
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react'
 
 interface User {
@@ -7,7 +6,6 @@ interface User {
   name: string
   email: string
   role: 'admin' | 'doctor' | 'patient'
-  picture?: string
 }
 
 interface AuthContextType {
@@ -15,7 +13,6 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   login: (email: string, password: string) => Promise<void>
-  googleLogin: (response: any, userType: 'patient' | 'clinician') => Promise<void>
   logout: () => void
 }
 
@@ -45,22 +42,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (token) {
         try {
           // In a real app, we would verify the token
-          // For the demo, just retrieve the user from localStorage
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
+          // For the demo, just check if a token exists
+          if (token === 'mock-jwt-token') {
+            // Create a user based on stored data or a default mock user
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+              setUser(JSON.parse(storedUser));
+            } else {
+              // Default mock user
+              setUser({
+                id: '123456',
+                name: 'Demo User',
+                email: 'user@example.com',
+                role: 'patient'
+              });
+            }
           } else {
-            // Default mock user
-            setUser({
-              id: '123456',
-              name: 'Demo User',
-              email: 'user@example.com',
-              role: 'patient'
-            });
+            // Invalid token
+            localStorage.removeItem('token');
+            setUser(null);
           }
         } catch (err) {
           localStorage.removeItem('token');
-          localStorage.removeItem('user');
           setUser(null);
         }
       }
@@ -104,58 +107,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  const googleLogin = async (response: any, userType: 'patient' | 'clinician') => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // MOCK GOOGLE LOGIN - No backend API call for the demo
-      // In a real app, you would verify the Google token with your backend
-
-      // Extract credential info from response
-      let payload;
-      try {
-        // If the response has credential, it's the JWT token from Google
-        if (response.credential) {
-          payload = jwtDecode(response.credential);
-        } else {
-          // If not, use what we have
-          payload = response;
-        }
-      } catch (e) {
-        // If decoding fails, use the response as is
-        payload = response;
-      }
-      
-      // Extract data from Google response
-      const mockUser = {
-        id: payload.sub || 'google-user-123',
-        name: payload.name || 'Google User',
-        email: payload.email || 'google-user@example.com',
-        role: userType === 'clinician' ? 'doctor' : 'patient', // Set role based on login form
-        picture: payload.picture
-      };
-      
-      // Create a mock token that contains the user info
-      const mockToken = 'google-mock-jwt-token';
-      
-      // Store mock token and user
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      
-      // Set user
-      setUser(mockUser);
-      
-      return Promise.resolve();
-    } catch (err: any) {
-      console.error('Google login error:', err);
-      setError('An error occurred during Google login');
-      return Promise.reject(err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -168,7 +119,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     error,
     login,
-    googleLogin,
     logout
   }
 
