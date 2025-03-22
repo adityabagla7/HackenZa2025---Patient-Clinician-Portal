@@ -254,11 +254,9 @@ const Login = () => {
       
       // Navigate to dashboard after a short delay
       setTimeout(() => {
-        if (userType === 'clinician') {
-          navigate('/doctor-dashboard')
-        } else {
-          navigate('/patient-dashboard')
-        }
+        // The redirection is now handled by the <Navigate> component in App.tsx
+        // based on the user's role from AuthContext
+        navigate('/')
       }, 1000)
     } catch (err) {
       // Error handled in AuthContext

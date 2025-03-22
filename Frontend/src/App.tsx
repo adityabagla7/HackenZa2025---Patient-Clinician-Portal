@@ -11,27 +11,53 @@ import Register from './pages/Register'
 
 // Components
 import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
   const { user } = useAuth()
 
+  // Helper function to redirect based on user role
+  const getRedirectPath = () => {
+    if (!user) return "/login"
+    
+    switch (user.role) {
+      case 'doctor':
+        return "/doctor-dashboard"
+      case 'patient':
+        return "/patient-dashboard"
+      default:
+        return "/dashboard"
+    }
+  }
+
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-      <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to={getRedirectPath()} />} />
+      <Route path="/register" element={!user ? <Register /> : <Navigate to={getRedirectPath()} />} />
       
-      {/* Demo routes without authentication for easier testing */}
+      {/* Protected routes with authentication */}
       <Route element={<Layout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/patient-dashboard" element={<PatientDashboard />} />
-        <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
+        {/* Admin and general routes */}
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+        </Route>
+        
+        {/* Patient-only routes */}
+        <Route element={<ProtectedRoute allowedRoles={['patient']} />}>
+          <Route path="/patient-dashboard" element={<PatientDashboard />} />
+        </Route>
+        
+        {/* Doctor-only routes */}
+        <Route element={<ProtectedRoute allowedRoles={['doctor']} />}>
+          <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
+        </Route>
       </Route>
 
       {/* Redirect from / to the appropriate route */}
       <Route 
         path="/" 
-        element={<Navigate to={user ? "/dashboard" : "/login"} />} 
+        element={<Navigate to={getRedirectPath()} />} 
       />
       
       {/* 404 route */}

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { FaCalendarAlt, FaClipboardList, FaFileInvoiceDollar, FaPills, FaPlus, FaUserMd } from 'react-icons/fa'
+import { useState, useEffect, useRef } from 'react'
+import { FaCalendarAlt, FaClipboardList, FaFileInvoiceDollar, FaPills, FaPlus, FaUserMd, FaPaperPlane, FaFileUpload, FaImage, FaVideo, FaFile, FaTimes } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
 
@@ -320,290 +320,497 @@ const Tab = styled.button<{ active: boolean }>`
   }
 `
 
-type TabName = 'appointments' | 'prescriptions' | 'records'
+const PromptSection = styled.section`
+  margin-bottom: 3rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+`
+
+const PromptTitle = styled.h2`
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #2d3748;
+`
+
+const PromptDescription = styled.p`
+  color: #718096;
+  margin-bottom: 1.5rem;
+`
+
+const PromptForm = styled.form`
+  width: 100%;
+`
+
+const PromptTextarea = styled.textarea`
+  width: 100%;
+  min-height: 150px;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 1rem;
+  font-family: inherit;
+  font-size: 1rem;
+  resize: vertical;
+  
+  &:focus {
+    outline: none;
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+  }
+`
+
+const ButtonContainer = styled.div`
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+`
+
+const FormActions = styled.div`
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+`
+
+const PromptButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  background-color: #3182ce;
+  color: white;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: #2b6cb0;
+  }
+  
+  &:disabled {
+    background-color: #a0aec0;
+    cursor: not-allowed;
+  }
+`
+
+const FileUploadButton = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: transparent;
+  color: #3182ce;
+  font-weight: 600;
+  border: 1px solid #3182ce;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background-color: #ebf8ff;
+  }
+`
+
+const HiddenFileInput = styled.input`
+  display: none;
+`
+
+const AttachmentsContainer = styled.div`
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+`
+
+const AttachmentItem = styled.div`
+  position: relative;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  aspect-ratio: 1;
+  background-color: #f7fafc;
+`
+
+const AttachmentPreview = styled.div<{ type: 'image' | 'video' | 'file' }>`
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  svg {
+    font-size: 2rem;
+    color: ${({ type }) => {
+      switch (type) {
+        case 'image':
+          return '#3182ce';
+        case 'video':
+          return '#e53e3e';
+        default:
+          return '#718096';
+      }
+    }};
+  }
+`
+
+const AttachmentName = styled.div`
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+`
+
+const RemoveAttachmentButton = styled.button`
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+  }
+`
+
+const ErrorMessage = styled.div`
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+`
+
+const PromptHistory = styled.div`
+  margin-top: 2rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1.5rem;
+`
+
+const PromptHistoryTitle = styled.h3`
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: #2d3748;
+`
+
+const PromptHistoryItem = styled.div`
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: #f7fafc;
+  margin-bottom: 0.75rem;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const PromptHistoryText = styled.p`
+  color: #4a5568;
+  margin-bottom: 0.5rem;
+`
+
+const PromptHistoryDate = styled.div`
+  font-size: 0.75rem;
+  color: #718096;
+`
+
+// Interface for prompt history items
+interface PromptHistoryItem {
+  id: string;
+  text: string;
+  timestamp: number;
+  attachments?: AttachmentFile[];
+}
+
+// Interface for attachment files
+interface AttachmentFile {
+  id: string;
+  file: File;
+  previewUrl?: string;
+  type: 'image' | 'video' | 'file';
+}
 
 const PatientDashboard = () => {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<TabName>('appointments')
+  const [prompt, setPrompt] = useState<string>('')
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryItem[]>([])
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([])
+  const [fileError, setFileError] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Allowed file types
+  const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg'];
+  const allowedFileTypes = [...allowedImageTypes, ...allowedVideoTypes, 'application/pdf'];
+  const maxFileSize = 10 * 1024 * 1024; // 10MB
+  
+  // Load prompt history from localStorage on component mount
+  useEffect(() => {
+    const savedPrompts = localStorage.getItem('patientPromptHistory')
+    if (savedPrompts) {
+      try {
+        setPromptHistory(JSON.parse(savedPrompts))
+      } catch (error) {
+        console.error('Failed to parse prompt history:', error)
+      }
+    }
+  }, [])
+  
+  // Clean up previews when component unmounts
+  useEffect(() => {
+    return () => {
+      attachments.forEach(attachment => {
+        if (attachment.previewUrl) {
+          URL.revokeObjectURL(attachment.previewUrl)
+        }
+      })
+    }
+  }, [attachments])
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    
+    setFileError('')
+    
+    Array.from(files).forEach(file => {
+      // Check file type
+      if (!allowedFileTypes.includes(file.type)) {
+        setFileError(`File type not supported: ${file.name}`)
+        return
+      }
+      
+      // Check file size
+      if (file.size > maxFileSize) {
+        setFileError(`File too large (max 10MB): ${file.name}`)
+        return
+      }
+      
+      // Determine file type
+      let fileType: 'image' | 'video' | 'file' = 'file'
+      if (allowedImageTypes.includes(file.type)) {
+        fileType = 'image'
+      } else if (allowedVideoTypes.includes(file.type)) {
+        fileType = 'video'
+      }
+      
+      // Create preview URL for images and videos
+      let previewUrl: string | undefined
+      if (fileType === 'image' || fileType === 'video') {
+        previewUrl = URL.createObjectURL(file)
+      }
+      
+      // Add to attachments
+      setAttachments(prev => [
+        ...prev,
+        {
+          id: `${Date.now()}-${file.name}`,
+          file,
+          previewUrl,
+          type: fileType
+        }
+      ])
+    })
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+  
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => {
+      const attachment = prev.find(a => a.id === id)
+      if (attachment?.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+      return prev.filter(a => a.id !== id)
+    })
+  }
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!prompt.trim() && attachments.length === 0) return
+    
+    // Create new prompt history item
+    const newPrompt: PromptHistoryItem = {
+      id: Date.now().toString(),
+      text: prompt,
+      timestamp: Date.now(),
+      attachments: attachments.map(a => ({
+        id: a.id,
+        file: a.file,
+        previewUrl: a.previewUrl,
+        type: a.type
+      }))
+    }
+    
+    // Update history state
+    const updatedHistory = [newPrompt, ...promptHistory]
+    
+    // For localStorage, we need a simplified version without actual File objects
+    const historyForStorage = updatedHistory.map(item => ({
+      id: item.id,
+      text: item.text,
+      timestamp: item.timestamp,
+      attachments: item.attachments ? item.attachments.map(a => ({
+        id: a.id,
+        fileName: a.file.name,
+        fileType: a.file.type,
+        type: a.type
+      })) : undefined
+    }))
+    
+    setPromptHistory(updatedHistory)
+    
+    // Save to localStorage
+    localStorage.setItem('patientPromptHistory', JSON.stringify(historyForStorage))
+    
+    // Clear the input and attachments
+    setPrompt('')
+    setAttachments([])
+    
+    console.log('Prompt submitted:', prompt, 'with attachments:', attachments)
+  }
+  
+  // Format date for display
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString()
+  }
   
   return (
     <div>
       <PageTitle>Patient Dashboard</PageTitle>
       
-      <Section>
-        <VitalsCard>
-          <VitalsTitle>Your Health Metrics</VitalsTitle>
-          <VitalsGrid>
-            <VitalItem>
-              <VitalValue>120/80</VitalValue>
-              <VitalLabel>Blood Pressure</VitalLabel>
-            </VitalItem>
-            <VitalItem>
-              <VitalValue>72</VitalValue>
-              <VitalLabel>Heart Rate (bpm)</VitalLabel>
-            </VitalItem>
-            <VitalItem>
-              <VitalValue>98.6°F</VitalValue>
-              <VitalLabel>Temperature</VitalLabel>
-            </VitalItem>
-            <VitalItem>
-              <VitalValue>98%</VitalValue>
-              <VitalLabel>Oxygen Saturation</VitalLabel>
-            </VitalItem>
-          </VitalsGrid>
-        </VitalsCard>
-      </Section>
-      
-      <Section>
-        <TabsContainer>
-          <Tab 
-            active={activeTab === 'appointments'}
-            onClick={() => setActiveTab('appointments')}
-          >
-            Appointments
-          </Tab>
-          <Tab 
-            active={activeTab === 'prescriptions'}
-            onClick={() => setActiveTab('prescriptions')}
-          >
-            Prescriptions
-          </Tab>
-          <Tab 
-            active={activeTab === 'records'}
-            onClick={() => setActiveTab('records')}
-          >
-            Medical Records
-          </Tab>
-        </TabsContainer>
-        
-        {activeTab === 'appointments' && (
-          <>
-            <SubTitle>Your Appointments</SubTitle>
-            <Grid>
-              <AppointmentCard>
-                <AppointmentIcon status="upcoming">
-                  <FaCalendarAlt />
-                </AppointmentIcon>
-                <AppointmentContent>
-                  <AppointmentTitle>General Checkup</AppointmentTitle>
-                  <AppointmentDetails>
-                    <Detail>
-                      <FaCalendarAlt />
-                      October 18, 2023 - 10:00 AM
-                    </Detail>
-                    <Detail>
-                      <FaUserMd />
-                      Dr. Sarah Johnson - Cardiology
-                    </Detail>
-                  </AppointmentDetails>
-                  <Status status="upcoming">Upcoming</Status>
-                </AppointmentContent>
-              </AppointmentCard>
-              
-              <AppointmentCard>
-                <AppointmentIcon status="pending">
-                  <FaCalendarAlt />
-                </AppointmentIcon>
-                <AppointmentContent>
-                  <AppointmentTitle>Follow-up Consultation</AppointmentTitle>
-                  <AppointmentDetails>
-                    <Detail>
-                      <FaCalendarAlt />
-                      October 23, 2023 - 2:30 PM
-                    </Detail>
-                    <Detail>
-                      <FaUserMd />
-                      Dr. Michael Chen - Neurology
-                    </Detail>
-                  </AppointmentDetails>
-                  <Status status="pending">Pending Confirmation</Status>
-                </AppointmentContent>
-              </AppointmentCard>
-              
-              <AppointmentCard>
-                <AppointmentIcon status="completed">
-                  <FaCalendarAlt />
-                </AppointmentIcon>
-                <AppointmentContent>
-                  <AppointmentTitle>Blood Test</AppointmentTitle>
-                  <AppointmentDetails>
-                    <Detail>
-                      <FaCalendarAlt />
-                      October 5, 2023 - 9:15 AM
-                    </Detail>
-                    <Detail>
-                      <FaUserMd />
-                      Dr. Lisa Rodriguez - Internal Medicine
-                    </Detail>
-                  </AppointmentDetails>
-                  <Status status="completed">Completed</Status>
-                </AppointmentContent>
-              </AppointmentCard>
-            </Grid>
+      <PromptSection>
+        <PromptTitle>Health Assistant</PromptTitle>
+        <PromptDescription>
+          Enter your health-related questions, symptoms, lab report details, or medicine inquiries below. 
+          You can also attach relevant images, videos, or documents.
+        </PromptDescription>
+        <PromptForm onSubmit={handleSubmit}>
+          <PromptTextarea 
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe your symptoms, ask about lab reports, request medicine recommendations, or any other health-related questions..."
+          />
+          
+          {attachments.length > 0 && (
+            <AttachmentsContainer>
+              {attachments.map(attachment => (
+                <AttachmentItem key={attachment.id}>
+                  <AttachmentPreview type={attachment.type}>
+                    {attachment.type === 'image' && (
+                      <img src={attachment.previewUrl} alt={attachment.file.name} />
+                    )}
+                    {attachment.type === 'video' && (
+                      <video src={attachment.previewUrl} />
+                    )}
+                    {attachment.type === 'file' && (
+                      <FaFile />
+                    )}
+                  </AttachmentPreview>
+                  <AttachmentName>{attachment.file.name}</AttachmentName>
+                  <RemoveAttachmentButton 
+                    onClick={() => handleRemoveAttachment(attachment.id)}
+                    type="button"
+                  >
+                    <FaTimes size={12} />
+                  </RemoveAttachmentButton>
+                </AttachmentItem>
+              ))}
+            </AttachmentsContainer>
+          )}
+          
+          {fileError && (
+            <ErrorMessage>{fileError}</ErrorMessage>
+          )}
+          
+          <ButtonContainer>
+            <FormActions>
+              <FileUploadButton>
+                <FaFileUpload />
+                Attach Files
+                <HiddenFileInput 
+                  type="file" 
+                  multiple 
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.ogg,.pdf"
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                />
+              </FileUploadButton>
+            </FormActions>
             
-            <ButtonRow>
-              <Button variant="primary">
-                <FaPlus />
-                Schedule New Appointment
-              </Button>
-            </ButtonRow>
-          </>
-        )}
+            <PromptButton type="submit" disabled={!prompt.trim() && attachments.length === 0}>
+              <FaPaperPlane />
+              Submit
+            </PromptButton>
+          </ButtonContainer>
+        </PromptForm>
         
-        {activeTab === 'prescriptions' && (
-          <>
-            <SubTitle>Your Prescriptions</SubTitle>
-            <Grid>
-              <MedicalCard>
-                <CardHeader>
-                  <CardIcon color="#3182ce">
-                    <FaPills />
-                  </CardIcon>
-                  <CardTitle>Current Medications</CardTitle>
-                </CardHeader>
-                
-                <PrescriptionItem>
-                  <MedicationName>Lisinopril 10mg</MedicationName>
-                  <MedicationDetails>
-                    Take 1 tablet by mouth once daily for high blood pressure
-                  </MedicationDetails>
-                </PrescriptionItem>
-                
-                <PrescriptionItem>
-                  <MedicationName>Metformin 500mg</MedicationName>
-                  <MedicationDetails>
-                    Take 1 tablet by mouth twice daily with meals for diabetes
-                  </MedicationDetails>
-                </PrescriptionItem>
-                
-                <PrescriptionItem>
-                  <MedicationName>Vitamin D3 1000 IU</MedicationName>
-                  <MedicationDetails>
-                    Take 1 capsule by mouth daily for vitamin D deficiency
-                  </MedicationDetails>
-                </PrescriptionItem>
-                
-                <ButtonRow>
-                  <Button variant="outline">Request Refill</Button>
-                </ButtonRow>
-              </MedicalCard>
-              
-              <MedicalCard>
-                <CardHeader>
-                  <CardIcon color="#e53e3e">
-                    <FaPills />
-                  </CardIcon>
-                  <CardTitle>Recent Prescriptions</CardTitle>
-                </CardHeader>
-                
-                <PrescriptionItem>
-                  <MedicationName>Amoxicillin 500mg</MedicationName>
-                  <MedicationDetails>
-                    Prescribed on Sep 15, 2023 by Dr. Michael Chen
-                  </MedicationDetails>
-                </PrescriptionItem>
-                
-                <PrescriptionItem>
-                  <MedicationName>Prednisone 20mg</MedicationName>
-                  <MedicationDetails>
-                    Prescribed on Aug 22, 2023 by Dr. Sarah Johnson
-                  </MedicationDetails>
-                </PrescriptionItem>
-                
-                <ButtonRow>
-                  <Button variant="outline">View All</Button>
-                </ButtonRow>
-              </MedicalCard>
-            </Grid>
-          </>
+        {promptHistory.length > 0 && (
+          <PromptHistory>
+            <PromptHistoryTitle>Previous Queries</PromptHistoryTitle>
+            {promptHistory.map((item) => (
+              <PromptHistoryItem key={item.id}>
+                <PromptHistoryText>{item.text}</PromptHistoryText>
+                {item.attachments && item.attachments.length > 0 && (
+                  <AttachmentsContainer>
+                    {item.attachments.map(attachment => (
+                      <AttachmentItem key={attachment.id}>
+                        <AttachmentPreview type={attachment.type}>
+                          {attachment.type === 'image' && attachment.previewUrl && (
+                            <img src={attachment.previewUrl} alt={attachment.file.name} />
+                          )}
+                          {attachment.type === 'video' && attachment.previewUrl && (
+                            <video src={attachment.previewUrl} />
+                          )}
+                          {attachment.type === 'file' || !attachment.previewUrl && (
+                            <FaFile />
+                          )}
+                        </AttachmentPreview>
+                        <AttachmentName>{attachment.file.name}</AttachmentName>
+                      </AttachmentItem>
+                    ))}
+                  </AttachmentsContainer>
+                )}
+                <PromptHistoryDate>{formatDate(item.timestamp)}</PromptHistoryDate>
+              </PromptHistoryItem>
+            ))}
+          </PromptHistory>
         )}
-        
-        {activeTab === 'records' && (
-          <>
-            <SubTitle>Your Medical Records</SubTitle>
-            <Grid>
-              <MedicalCard>
-                <CardHeader>
-                  <CardIcon color="#38a169">
-                    <FaClipboardList />
-                  </CardIcon>
-                  <CardTitle>Test Results</CardTitle>
-                </CardHeader>
-                
-                <RecordItem>
-                  <RecordTitle>Complete Blood Count (CBC)</RecordTitle>
-                  <RecordDate>October 5, 2023</RecordDate>
-                </RecordItem>
-                
-                <RecordItem>
-                  <RecordTitle>Lipid Panel</RecordTitle>
-                  <RecordDate>October 5, 2023</RecordDate>
-                </RecordItem>
-                
-                <RecordItem>
-                  <RecordTitle>Comprehensive Metabolic Panel</RecordTitle>
-                  <RecordDate>October 5, 2023</RecordDate>
-                </RecordItem>
-                
-                <ButtonRow>
-                  <Button variant="outline">View Details</Button>
-                </ButtonRow>
-              </MedicalCard>
-              
-              <MedicalCard>
-                <CardHeader>
-                  <CardIcon color="#805ad5">
-                    <FaClipboardList />
-                  </CardIcon>
-                  <CardTitle>Medical History</CardTitle>
-                </CardHeader>
-                
-                <RecordItem>
-                  <RecordTitle>Annual Physical Examination</RecordTitle>
-                  <RecordDate>August 12, 2023</RecordDate>
-                </RecordItem>
-                
-                <RecordItem>
-                  <RecordTitle>Cardiac Evaluation</RecordTitle>
-                  <RecordDate>May 3, 2023</RecordDate>
-                </RecordItem>
-                
-                <RecordItem>
-                  <RecordTitle>Allergy Assessment</RecordTitle>
-                  <RecordDate>January 22, 2023</RecordDate>
-                </RecordItem>
-                
-                <ButtonRow>
-                  <Button variant="outline">View Complete History</Button>
-                </ButtonRow>
-              </MedicalCard>
-              
-              <MedicalCard>
-                <CardHeader>
-                  <CardIcon color="#dd6b20">
-                    <FaFileInvoiceDollar />
-                  </CardIcon>
-                  <CardTitle>Medical Bills & Insurance</CardTitle>
-                </CardHeader>
-                
-                <RecordItem>
-                  <RecordTitle>Office Visit - Dr. Sarah Johnson</RecordTitle>
-                  <RecordDate>October 18, 2023 - $25.00 copay</RecordDate>
-                </RecordItem>
-                
-                <RecordItem>
-                  <RecordTitle>Lab Work - Quest Diagnostics</RecordTitle>
-                  <RecordDate>October 5, 2023 - $15.00 copay</RecordDate>
-                </RecordItem>
-                
-                <ButtonRow>
-                  <Button variant="outline">View All Statements</Button>
-                </ButtonRow>
-              </MedicalCard>
-            </Grid>
-          </>
-        )}
-      </Section>
+      </PromptSection>
     </div>
   )
 }
