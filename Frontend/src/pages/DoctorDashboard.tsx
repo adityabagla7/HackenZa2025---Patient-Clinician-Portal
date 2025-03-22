@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
     FaCalendarAlt,
     FaClipboardList,
@@ -7,7 +7,10 @@ import {
     FaPills,
     FaPlus,
     FaSearch,
-    FaUser
+    FaUser,
+    FaReply,
+    FaFileAlt,
+    FaCommentMedical
 } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
@@ -454,9 +457,126 @@ interface Task {
   completed: boolean
 }
 
+// Interface for patient query items
+interface PatientQuery {
+  id: string;
+  text: string;
+  timestamp: number;
+  patientName?: string;
+  attachments?: {
+    id: string;
+    fileName: string;
+    fileType: string;
+    type: 'image' | 'video' | 'file';
+  }[];
+}
+
+const QueryCard = styled(Card)`
+  overflow: hidden;
+`
+
+const QueryHeader = styled.div`
+  padding: 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`
+
+const QueryTitle = styled.h3`
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+`
+
+const QueryDate = styled.div`
+  font-size: 0.875rem;
+  color: #718096;
+`
+
+const QueryList = styled.div`
+  max-height: 400px;
+  overflow-y: auto;
+`
+
+const QueryItem = styled.div`
+  padding: 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  
+  &:last-child {
+    border-bottom: none;
+  }
+`
+
+const QueryTime = styled.div`
+  display: flex;
+  align-items: center;
+  color: #4a5568;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+  
+  svg {
+    margin-right: 0.5rem;
+    font-size: 1rem;
+    color: #718096;
+  }
+`
+
+const QueryPatient = styled.div`
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+  color: #2d3748;
+`
+
+const QueryText = styled.div`
+  font-size: 0.875rem;
+  color: #4a5568;
+  margin-bottom: 0.75rem;
+  white-space: pre-line;
+`
+
+const AttachmentsList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+`
+
+const AttachmentBadge = styled.div<{ type: string }>`
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  background-color: ${({ type }) => {
+    switch (type) {
+      case 'image':
+        return '#3182ce20';
+      case 'video':
+        return '#e53e3e20';
+      default:
+        return '#71809620';
+    }
+  }};
+  color: ${({ type }) => {
+    switch (type) {
+      case 'image':
+        return '#3182ce';
+      case 'video':
+        return '#e53e3e';
+      default:
+        return '#718096';
+    }
+  }};
+`
+
 const DoctorDashboard = () => {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('patients')
+  const [patientQueries, setPatientQueries] = useState<PatientQuery[]>([])
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: '1',
@@ -488,12 +608,35 @@ const DoctorDashboard = () => {
     },
   ])
   
+  // Load patient queries from localStorage
+  useEffect(() => {
+    const savedPrompts = localStorage.getItem('patientPromptHistory')
+    if (savedPrompts) {
+      try {
+        const parsedPrompts = JSON.parse(savedPrompts)
+        // Add dummy patient names since we don't have real user associations yet
+        const queriesWithNames = parsedPrompts.map((query: PatientQuery, index: number) => ({
+          ...query,
+          patientName: `Patient ${index + 1}`
+        }))
+        setPatientQueries(queriesWithNames)
+      } catch (error) {
+        console.error('Failed to parse patient queries:', error)
+      }
+    }
+  }, [])
+  
   const handleTaskToggle = (taskId: string) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
         task.id === taskId ? { ...task, completed: !task.completed } : task
       )
     )
+  }
+  
+  // Format date for display
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString()
   }
   
   return (
@@ -503,11 +646,11 @@ const DoctorDashboard = () => {
       <StatsGrid>
         <StatCard>
           <StatIcon color="#3182ce">
-            <FaCalendarAlt />
+            <FaCommentMedical />
           </StatIcon>
           <StatContent>
-            <StatValue>8</StatValue>
-            <StatLabel>Today's Appointments</StatLabel>
+            <StatValue>{patientQueries.length}</StatValue>
+            <StatLabel>Patient Queries</StatLabel>
           </StatContent>
         </StatCard>
         
@@ -545,133 +688,54 @@ const DoctorDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Section>
-            <TodayScheduleCard>
-              <ScheduleHeader>
-                <ScheduleTitle>Today's Schedule</ScheduleTitle>
-                <ScheduleDate>October 18, 2023</ScheduleDate>
-              </ScheduleHeader>
+            <QueryCard>
+              <QueryHeader>
+                <QueryTitle>Patient Queries</QueryTitle>
+                <QueryDate>{new Date().toLocaleDateString()}</QueryDate>
+              </QueryHeader>
               
-              <AppointmentList>
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    8:00 AM - 8:30 AM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Emily Wilson
-                    <StatusBadge status="checked-in">Checked In</StatusBadge>
-                  </AppointmentPatient>
-                  <AppointmentType>Annual Physical Examination</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="primary">Start Session</ActionButton>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem status="current">
-                  <AppointmentTime>
-                    <FaClock />
-                    9:00 AM - 9:30 AM (Current)
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    John Smith
-                    <StatusBadge status="checked-in">Checked In</StatusBadge>
-                  </AppointmentPatient>
-                  <AppointmentType>Follow-up Consultation</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="primary">Start Session</ActionButton>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    10:00 AM - 10:30 AM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Sarah Johnson
-                    <StatusBadge status="waiting">Waiting</StatusBadge>
-                  </AppointmentPatient>
-                  <AppointmentType>Diabetes Management</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    11:00 AM - 11:30 AM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Robert Davis
-                    <StatusBadge status="no-show">No Show</StatusBadge>
-                  </AppointmentPatient>
-                  <AppointmentType>Blood Pressure Check</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                    <ActionButton variant="secondary">Reschedule</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    1:00 PM - 1:30 PM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Michael Brown
-                  </AppointmentPatient>
-                  <AppointmentType>New Patient Consultation</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    2:00 PM - 2:30 PM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Lisa Anderson
-                  </AppointmentPatient>
-                  <AppointmentType>Medication Review</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    3:00 PM - 3:30 PM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    David Thompson
-                  </AppointmentPatient>
-                  <AppointmentType>Chronic Pain Management</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-                
-                <AppointmentItem>
-                  <AppointmentTime>
-                    <FaClock />
-                    4:00 PM - 4:30 PM
-                  </AppointmentTime>
-                  <AppointmentPatient>
-                    Jennifer White
-                  </AppointmentPatient>
-                  <AppointmentType>Post-Surgery Follow-up</AppointmentType>
-                  <AppointmentActions>
-                    <ActionButton variant="outline">View Records</ActionButton>
-                  </AppointmentActions>
-                </AppointmentItem>
-              </AppointmentList>
-            </TodayScheduleCard>
+              <QueryList>
+                {patientQueries.length > 0 ? (
+                  patientQueries.map((query) => (
+                    <QueryItem key={query.id}>
+                      <QueryTime>
+                        <FaClock />
+                        {formatDate(query.timestamp)}
+                      </QueryTime>
+                      <QueryPatient>
+                        {query.patientName || 'Anonymous Patient'}
+                      </QueryPatient>
+                      <QueryText>{query.text}</QueryText>
+                      
+                      {query.attachments && query.attachments.length > 0 && (
+                        <AttachmentsList>
+                          {query.attachments.map(attachment => (
+                            <AttachmentBadge key={attachment.id} type={attachment.type}>
+                              {attachment.type === 'image' && <FaFileAlt />}
+                              {attachment.type === 'video' && <FaFileAlt />}
+                              {attachment.type === 'file' && <FaFileAlt />}
+                              {attachment.fileName}
+                            </AttachmentBadge>
+                          ))}
+                        </AttachmentsList>
+                      )}
+                      
+                      <AppointmentActions>
+                        <ActionButton variant="primary">
+                          <FaReply />
+                          Respond
+                        </ActionButton>
+                        <ActionButton variant="outline">View Patient Records</ActionButton>
+                      </AppointmentActions>
+                    </QueryItem>
+                  ))
+                ) : (
+                  <QueryItem>
+                    <QueryText>No patient queries available at this time.</QueryText>
+                  </QueryItem>
+                )}
+              </QueryList>
+            </QueryCard>
           </Section>
         </div>
         
