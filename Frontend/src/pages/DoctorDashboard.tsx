@@ -10,10 +10,14 @@ import {
     FaUser,
     FaReply,
     FaFileAlt,
-    FaCommentMedical
+    FaCommentMedical,
+    FaCheck,
+    FaEdit,
+    FaCheckCircle
 } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
+import { updateApprovedResponses } from '../services/api'
 
 const PageTitle = styled.h1`
   margin-bottom: 2rem;
@@ -465,6 +469,9 @@ interface PatientQuery {
   patientName?: string;
   aiResponse?: string;
   responseStatus?: 'loading' | 'success' | 'error';
+  isApproved?: boolean;
+  isEditing?: boolean;
+  editedResponse?: string;
   attachments?: {
     id: string;
     fileName: string;
@@ -632,6 +639,19 @@ const ResponseStatusBadge = styled.span<{ status: 'loading' | 'success' | 'error
   }};
 `
 
+// Add a success message component
+const SuccessMessage = styled.div`
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: #38a16920;
+  color: #38a169;
+  font-size: 0.875rem;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`
+
 const DoctorDashboard = () => {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('patients')
@@ -667,23 +687,128 @@ const DoctorDashboard = () => {
     },
   ])
   
+  // Inside DoctorDashboard component, add state for approval feedback
+  const [approvedQuery, setApprovedQuery] = useState<string | null>(null)
+  
   // Load patient queries from localStorage
   useEffect(() => {
     const savedPrompts = localStorage.getItem('patientPromptHistory')
+    
     if (savedPrompts) {
       try {
         const parsedPrompts = JSON.parse(savedPrompts)
-        // Add dummy patient names since we don't have real user associations yet
-        const queriesWithNames = parsedPrompts.map((query: PatientQuery, index: number) => ({
-          ...query,
-          patientName: `Patient ${index + 1}`
-        }))
-        setPatientQueries(queriesWithNames)
+        setPatientQueries(parsedPrompts)
       } catch (error) {
         console.error('Failed to parse patient queries:', error)
       }
     }
+    
+    // Set up a storage event listener to detect changes made by patients
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Clean up on unmount
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [])
+  
+  // Handle storage changes (when a patient submits a new query)
+  const handleStorageChange = (event: StorageEvent) => {
+    if (event.key === 'patientPromptHistory') {
+      console.log('Storage event detected, reloading patient queries');
+      const savedPrompts = localStorage.getItem('patientPromptHistory')
+      if (savedPrompts) {
+        try {
+          const parsedPrompts = JSON.parse(savedPrompts)
+          setPatientQueries(parsedPrompts)
+        } catch (error) {
+          console.error('Failed to parse patient queries:', error)
+        }
+      }
+    }
+  };
+
+  // Save updated queries to localStorage
+  const saveQueriesToLocalStorage = () => {
+    // Create a simplified version without file objects
+    const simplifiedQueries = patientQueries.map(query => {
+      // Explicitly ensure isApproved is a boolean
+      const isApproved = query.isApproved === true;
+      
+      return {
+        id: query.id,
+        text: query.text,
+        timestamp: query.timestamp,
+        patientName: query.patientName,
+        aiResponse: query.aiResponse,
+        responseStatus: query.responseStatus,
+        isApproved: isApproved,
+        attachments: query.attachments ? query.attachments.map(a => ({
+          id: a.id,
+          fileName: a.fileName,
+          fileType: a.fileType,
+          type: a.type
+        })) : undefined
+      };
+    });
+    
+    console.log('Saving to localStorage:', simplifiedQueries);
+    
+    // Store in localStorage - make sure to use remove/set pattern
+    // to ensure storage events fire properly
+    const queriesJson = JSON.stringify(simplifiedQueries);
+    localStorage.removeItem('patientPromptHistory');
+    localStorage.setItem('patientPromptHistory', queriesJson);
+    
+    // Verify what was saved
+    const savedData = localStorage.getItem('patientPromptHistory');
+    console.log('Verified saved data:', savedData ? JSON.parse(savedData) : null);
+  }
+  
+  // Update the handleApproveResponse function
+  const handleApproveResponse = async (queryId: string) => {
+    console.log(`Doctor approving response for query ${queryId}`)
+    
+    try {
+      // Find the query to approve
+      const queryToApprove = patientQueries.find(q => q.id === queryId)
+      
+      if (!queryToApprove) {
+        console.error(`Query with ID ${queryId} not found`)
+        return
+      }
+      
+      // Update the query
+      const updatedQuery = { ...queryToApprove, isApproved: true }
+      console.log('Updated query:', updatedQuery)
+      
+      // Update the entire queries array
+      const updatedQueries = patientQueries.map(q => 
+        q.id === queryId ? updatedQuery : q
+      )
+      
+      // Update state
+      setPatientQueries(updatedQueries)
+      setApprovedQuery(queryId)
+      
+      // Then update the shared localStorage data to make it available to the patient
+      saveQueriesToLocalStorage()
+      
+      console.log('Doctor approval complete, saved to localStorage')
+      
+      // Verify what was saved
+      const savedPrompts = localStorage.getItem('patientPromptHistory')
+      console.log('Verified saved data after approval:', savedPrompts ? JSON.parse(savedPrompts) : null)
+      
+      // Auto-dismiss success message after 5 seconds
+      setTimeout(() => {
+        setApprovedQuery(null)
+      }, 5000)
+      
+    } catch (error) {
+      console.error('Error approving response:', error)
+    }
+  }
   
   const handleTaskToggle = (taskId: string) => {
     setTasks(prevTasks =>
@@ -791,16 +916,39 @@ const DoctorDashboard = () => {
                                  query.responseStatus === 'success' ? 'Complete' : 'Failed'}
                               </ResponseStatusBadge>
                             )}
+                            {query.isApproved && (
+                              <ResponseStatusBadge status="success">Doctor Approved</ResponseStatusBadge>
+                            )}
                           </GeminiResponseTitle>
                           {query.responseStatus === 'loading' && <GeminiResponseText>Analyzing patient query...</GeminiResponseText>}
                           {query.responseStatus === 'error' && <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>}
                           {query.responseStatus === 'success' && query.aiResponse && (
                             <GeminiResponseText>{query.aiResponse}</GeminiResponseText>
                           )}
+                          
+                          {/* Show success message after approval */}
+                          {approvedQuery === query.id && (
+                            <SuccessMessage>
+                              <FaCheckCircle />
+                              Response approved successfully. The patient will see this in the "Responses to Queries" tab.
+                            </SuccessMessage>
+                          )}
                         </GeminiResponseContainer>
                       )}
                       
                       <AppointmentActions>
+                        {query.responseStatus === 'success' && !query.isApproved && (
+                          <ActionButton variant="primary" onClick={() => handleApproveResponse(query.id)}>
+                            <FaCheck />
+                            Approve Response
+                          </ActionButton>
+                        )}
+                        {query.isApproved && (
+                          <ActionButton variant="secondary" disabled>
+                            <FaCheck />
+                            Approved
+                          </ActionButton>
+                        )}
                         <ActionButton variant="primary">
                           <FaReply />
                           Respond

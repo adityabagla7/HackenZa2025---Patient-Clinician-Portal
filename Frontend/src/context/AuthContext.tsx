@@ -14,6 +14,7 @@ interface AuthContextType {
   error: string | null
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  switchRole: (role: 'doctor' | 'patient') => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,10 +35,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Generate a unique session ID for this tab
+  useEffect(() => {
+    if (!sessionStorage.getItem('tabId')) {
+      sessionStorage.setItem('tabId', Math.random().toString(36).substring(2, 15));
+    }
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token')
+      // Use sessionStorage instead of localStorage to make each tab independent
+      const token = sessionStorage.getItem('token')
       
       if (token) {
         try {
@@ -45,25 +54,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // For the demo, just check if a token exists
           if (token === 'mock-jwt-token') {
             // Create a user based on stored data or a default mock user
-            const storedUser = localStorage.getItem('user');
+            const storedUser = sessionStorage.getItem('user');
             if (storedUser) {
-              setUser(JSON.parse(storedUser));
+              setUser(JSON.parse(storedUser) as User);
             } else {
               // Default mock user
-              setUser({
+              const defaultUser: User = {
                 id: '123456',
                 name: 'Demo User',
                 email: 'user@example.com',
                 role: 'patient'
-              });
+              };
+              setUser(defaultUser);
             }
           } else {
             // Invalid token
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
             setUser(null);
           }
         } catch (err) {
-          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
           setUser(null);
         }
       }
@@ -79,21 +89,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
     
     try {
+      // Determine role based on email
+      const userRole: User['role'] = 
+        email.toLowerCase().includes('doctor') || email.toLowerCase().includes('clinician') 
+          ? 'doctor' 
+          : 'patient';
+      
       // MOCK LOGIN - No backend API call for the demo
       // Create a mock token and user based on email
-      const mockUser = {
+      const mockUser: User = {
         id: '123456',
         name: email.split('@')[0],
         email: email,
-        role: email.toLowerCase().includes('doctor') || email.toLowerCase().includes('clinician') ? 'doctor' : 'patient' // Set role based on email
+        role: userRole
       };
       
       // Create a mock token that contains the user info
       const mockToken = 'mock-jwt-token';
       
-      // Store mock token and user
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      // Store mock token and user in sessionStorage instead of localStorage
+      sessionStorage.setItem('token', mockToken);
+      sessionStorage.setItem('user', JSON.stringify(mockUser));
       
       // Set user
       setUser(mockUser);
@@ -108,10 +124,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     delete axios.defaults.headers.common['Authorization'];
     setUser(null);
+  }
+  
+  // Add a function to switch between doctor and patient roles for testing
+  const switchRole = (role: 'doctor' | 'patient') => {
+    if (!user) return;
+    
+    const updatedUser: User = {
+      ...user,
+      role: role
+    };
+    
+    sessionStorage.setItem('user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
   }
 
   const value = {
@@ -119,7 +148,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     error,
     login,
-    logout
+    logout,
+    switchRole
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
