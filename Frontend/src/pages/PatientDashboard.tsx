@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { FaCalendarAlt, FaClipboardList, FaFileInvoiceDollar, FaPills, FaPlus, FaUserMd, FaPaperPlane, FaFileUpload, FaImage, FaVideo, FaFile, FaTimes } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
+import { getAIResponse } from '../services/api'
 
 const PageTitle = styled.h1`
   margin-bottom: 2rem;
@@ -551,6 +552,8 @@ interface PromptHistoryItem {
   text: string;
   timestamp: number;
   attachments?: AttachmentFile[];
+  aiResponse?: string;
+  responseStatus?: 'loading' | 'success' | 'error';
 }
 
 // Interface for attachment files
@@ -567,6 +570,7 @@ const PatientDashboard = () => {
   const [promptHistory, setPromptHistory] = useState<PromptHistoryItem[]>([])
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [fileError, setFileError] = useState<string>('')
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Allowed file types
@@ -659,13 +663,16 @@ const PatientDashboard = () => {
     })
   }
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!prompt.trim() && attachments.length === 0) return
+    if ((!prompt.trim() && attachments.length === 0) || isSubmitting) return
+    
+    setIsSubmitting(true)
     
     // Create new prompt history item
+    const newPromptId = Date.now().toString()
     const newPrompt: PromptHistoryItem = {
-      id: Date.now().toString(),
+      id: newPromptId,
       text: prompt,
       timestamp: Date.now(),
       attachments: attachments.map(a => ({
@@ -673,35 +680,79 @@ const PatientDashboard = () => {
         file: a.file,
         previewUrl: a.previewUrl,
         type: a.type
-      }))
+      })),
+      responseStatus: 'loading'
     }
     
-    // Update history state
+    // Update history state immediately with 'loading' status
     const updatedHistory = [newPrompt, ...promptHistory]
-    
-    // For localStorage, we need a simplified version without actual File objects
-    const historyForStorage = updatedHistory.map(item => ({
-      id: item.id,
-      text: item.text,
-      timestamp: item.timestamp,
-      attachments: item.attachments ? item.attachments.map(a => ({
-        id: a.id,
-        fileName: a.file.name,
-        fileType: a.file.type,
-        type: a.type
-      })) : undefined
-    }))
-    
     setPromptHistory(updatedHistory)
     
-    // Save to localStorage
-    localStorage.setItem('patientPromptHistory', JSON.stringify(historyForStorage))
-    
-    // Clear the input and attachments
-    setPrompt('')
-    setAttachments([])
-    
-    console.log('Prompt submitted:', prompt, 'with attachments:', attachments)
+    try {
+      // Call the Gemini API for an AI response
+      const aiResponse = await getAIResponse(prompt)
+      
+      // Update the history item with the AI response
+      const updatedHistoryWithResponse = updatedHistory.map(item => 
+        item.id === newPromptId 
+          ? { ...item, aiResponse, responseStatus: 'success' as const } 
+          : item
+      )
+      
+      setPromptHistory(updatedHistoryWithResponse)
+      
+      // For localStorage, create a simplified version without actual File objects
+      const historyForStorage = updatedHistoryWithResponse.map(item => ({
+        id: item.id,
+        text: item.text,
+        timestamp: item.timestamp,
+        aiResponse: item.aiResponse,
+        responseStatus: item.responseStatus,
+        attachments: item.attachments ? item.attachments.map(a => ({
+          id: a.id,
+          fileName: a.file.name,
+          fileType: a.file.type,
+          type: a.type
+        })) : undefined
+      }))
+      
+      // Save to localStorage
+      localStorage.setItem('patientPromptHistory', JSON.stringify(historyForStorage))
+      
+    } catch (error) {
+      console.error('Error getting AI response:', error)
+      
+      // Update the item with error status
+      const updatedHistoryWithError = updatedHistory.map(item => 
+        item.id === newPromptId 
+          ? { ...item, responseStatus: 'error' as const } 
+          : item
+      )
+      
+      setPromptHistory(updatedHistoryWithError)
+      
+      // Save to localStorage with error status
+      const historyForStorage = updatedHistoryWithError.map(item => ({
+        id: item.id,
+        text: item.text,
+        timestamp: item.timestamp,
+        aiResponse: item.aiResponse,
+        responseStatus: item.responseStatus,
+        attachments: item.attachments ? item.attachments.map(a => ({
+          id: a.id,
+          fileName: a.file.name,
+          fileType: a.file.type,
+          type: a.type
+        })) : undefined
+      }))
+      
+      localStorage.setItem('patientPromptHistory', JSON.stringify(historyForStorage))
+    } finally {
+      // Clear the input and attachments regardless of success/failure
+      setPrompt('')
+      setAttachments([])
+      setIsSubmitting(false)
+    }
   }
   
   // Format date for display
@@ -772,9 +823,13 @@ const PatientDashboard = () => {
               </FileUploadButton>
             </FormActions>
             
-            <PromptButton type="submit" disabled={!prompt.trim() && attachments.length === 0}>
-              <FaPaperPlane />
-              Submit
+            <PromptButton type="submit" disabled={(!prompt.trim() && attachments.length === 0) || isSubmitting}>
+              {isSubmitting ? 'Submitting...' : (
+                <>
+                  <FaPaperPlane />
+                  Submit
+                </>
+              )}
             </PromptButton>
           </ButtonContainer>
         </PromptForm>

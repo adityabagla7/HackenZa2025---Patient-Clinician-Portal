@@ -463,6 +463,8 @@ interface PatientQuery {
   text: string;
   timestamp: number;
   patientName?: string;
+  aiResponse?: string;
+  responseStatus?: 'loading' | 'success' | 'error';
   attachments?: {
     id: string;
     fileName: string;
@@ -569,6 +571,63 @@ const AttachmentBadge = styled.div<{ type: string }>`
         return '#e53e3e';
       default:
         return '#718096';
+    }
+  }};
+`
+
+const GeminiResponseContainer = styled.div`
+  border-left: 3px solid #3182ce;
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  background-color: #f8fafc;
+  border-radius: 0 0.25rem 0.25rem 0;
+`
+
+const GeminiResponseTitle = styled.div`
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #3182ce;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+`
+
+const GeminiResponseText = styled.div`
+  font-size: 0.875rem;
+  color: #4a5568;
+  white-space: pre-line;
+`
+
+const ResponseStatusBadge = styled.span<{ status: 'loading' | 'success' | 'error' }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  background-color: ${({ status }) => {
+    switch (status) {
+      case 'success':
+        return '#38a16920';
+      case 'loading':
+        return '#3182ce20';
+      case 'error':
+        return '#e53e3e20';
+      default:
+        return '#a0aec020';
+    }
+  }};
+  color: ${({ status }) => {
+    switch (status) {
+      case 'success':
+        return '#38a169';
+      case 'loading':
+        return '#3182ce';
+      case 'error':
+        return '#e53e3e';
+      default:
+        return '#a0aec0';
     }
   }};
 `
@@ -718,6 +777,27 @@ const DoctorDashboard = () => {
                             </AttachmentBadge>
                           ))}
                         </AttachmentsList>
+                      )}
+                      
+                      {/* Display Gemini's AI Response */}
+                      {query.responseStatus && (
+                        <GeminiResponseContainer>
+                          <GeminiResponseTitle>
+                            <FaCommentMedical />
+                            AI Analysis
+                            {query.responseStatus && (
+                              <ResponseStatusBadge status={query.responseStatus}>
+                                {query.responseStatus === 'loading' ? 'Analyzing...' : 
+                                 query.responseStatus === 'success' ? 'Complete' : 'Failed'}
+                              </ResponseStatusBadge>
+                            )}
+                          </GeminiResponseTitle>
+                          {query.responseStatus === 'loading' && <GeminiResponseText>Analyzing patient query...</GeminiResponseText>}
+                          {query.responseStatus === 'error' && <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>}
+                          {query.responseStatus === 'success' && query.aiResponse && (
+                            <GeminiResponseText>{query.aiResponse}</GeminiResponseText>
+                          )}
+                        </GeminiResponseContainer>
                       )}
                       
                       <AppointmentActions>
