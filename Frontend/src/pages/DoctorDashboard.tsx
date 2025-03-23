@@ -1012,37 +1012,43 @@ const DoctorDashboard = () => {
         return;
       }
       
+      console.log(`Found query to update:`, queryToUpdate);
+      
       // If currently in edit mode, save the edits first
       if (queryToUpdate.isEditing && queryToUpdate.editedResponse) {
         await handleSaveEditedResponse(queryId);
       }
       
-      // Update the query in our local state
+      // Update the query in our local state with strict boolean handling
       const updatedQueries = patientQueries.map(query => 
         query.id === queryId 
-          ? { ...query, isApproved: true } 
+          ? { ...query, isApproved: true, isEditing: false } 
           : query
       );
       
+      console.log(`Local state update for query ${queryId}:`, updatedQueries.find(q => q.id === queryId));
+      
+      // Update state first to give immediate feedback
       setPatientQueries(updatedQueries);
       
-      // Add this query to our approvedQueries state
+      // Add this query to our approvedQueries state for visual feedback
       setApprovedQueries(prev => new Set(prev).add(queryId));
       
-      // Save this update to localStorage and API
-      console.log(`Sending verification status to API for query ${queryId}`);
+      // Important: Call the API service first to update localStorage directly
+      console.log(`Sending verification status to API service for query ${queryId}`);
       const apiResult = await updateApprovedResponses(queryId, true);
       
       if (!apiResult) {
         console.error('API service failed to update verification status');
-      }
-      
-      // Save to localStorage - make sure to await this
-      console.log('Saving updated queries to localStorage...');
-      const saveResult = await saveQueriesToLocalStorage();
-      
-      if (!saveResult) {
-        console.error('Failed to save to localStorage');
+        // If API service failed, update localStorage directly as a fallback
+        console.log('Falling back to direct localStorage update');
+        const saveResult = await saveQueriesToLocalStorage();
+        
+        if (!saveResult) {
+          console.error('Failed to save to localStorage');
+          // Show error message to user here
+          return;
+        }
       }
       
       console.log(`Response for query ${queryId} has been verified successfully`);
@@ -1254,10 +1260,6 @@ const DoctorDashboard = () => {
                             Verified
                           </ActionButton>
                         )}
-                        <ActionButton variant="primary">
-                          <FaReply />
-                          Respond
-                        </ActionButton>
                         <ActionButton variant="outline">View Patient Records</ActionButton>
                       </AppointmentActions>
                     </QueryItem>

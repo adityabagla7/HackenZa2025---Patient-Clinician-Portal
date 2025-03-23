@@ -57,26 +57,36 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
           console.log(`API: Prompt ${prompt.id}: isApproved=${prompt.isApproved}, type=${typeof prompt.isApproved}`);
         });
         
-        // Find the query that needs updating to preserve any edited content
+        // Find the query that needs updating
         const queryToUpdate = prompts.find((p: any) => p.id === queryId);
+        if (!queryToUpdate) {
+          console.error(`API: Could not find query with ID ${queryId}`);
+          resolve(false);
+          return;
+        }
+        
+        console.log(`API: Found query to update:`, queryToUpdate);
         
         // Update the specific query's approval status
         const updatedPrompts = prompts.map((prompt: any) => {
           if (prompt.id === queryId) {
             console.log(`API: Updating query ${queryId} verification status from ${prompt.isApproved ? 'VERIFIED' : 'UNVERIFIED'} to ${isApproved ? 'VERIFIED' : 'UNVERIFIED'}`);
-            // Ensure isApproved is boolean and preserve the response content
+            
+            // Create a new object to avoid reference issues
             return { 
               ...prompt, 
-              isApproved: isApproved === true,
-              // Keep any other properties like editedResponse
+              isApproved: isApproved === true, // Strict boolean comparison
+              // Preserve edited response if present
+              aiResponse: prompt.editedResponse || prompt.aiResponse 
             };
           }
-          // Ensure all other items maintain proper boolean isApproved
+          // For other items, maintain their existing approval status as boolean
           return { ...prompt, isApproved: prompt.isApproved === true };
         });
         
+        // Double-check the updated prompt
         const updatedPrompt = updatedPrompts.find((p: any) => p.id === queryId);
-        console.log(`API: Updated prompt ${queryId}:`, updatedPrompt);
+        console.log(`API: Verification updated for ${queryId}:`, updatedPrompt);
         console.log(`API: Verification status type: ${typeof updatedPrompt?.isApproved}`);
         
         // Save back to localStorage - we need to use a temporary variable first
@@ -93,6 +103,12 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
           const savedQuery = parsedData.find((p: any) => p.id === queryId);
           console.log(`API: Verified saved query ${queryId}:`, savedQuery);
           console.log(`API: Saved verification status: ${savedQuery?.isApproved ? 'VERIFIED' : 'UNVERIFIED'}, type: ${typeof savedQuery?.isApproved}`);
+          
+          // Sort all saved items by timestamp (descending) to verify order
+          const sortedQueries = [...parsedData].sort((a, b) => b.timestamp - a.timestamp);
+          sortedQueries.forEach((q, index) => {
+            console.log(`API: Item ${index}: id=${q.id}, timestamp=${q.timestamp}, isApproved=${q.isApproved}`);
+          });
         }
         
         console.log('API: Successfully updated localStorage with new verification status');

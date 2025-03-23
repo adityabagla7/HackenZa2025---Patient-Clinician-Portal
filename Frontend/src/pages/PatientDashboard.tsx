@@ -858,23 +858,28 @@ const PatientDashboard = () => {
         const parsedPrompts = JSON.parse(savedPrompts);
         console.log('Loaded prompts from localStorage:', parsedPrompts);
         
+        // Ensure proper ordering - newest items first
+        const sortedPrompts = [...parsedPrompts].sort((a, b) => b.timestamp - a.timestamp);
+        console.log('Sorted prompts:', sortedPrompts.map(p => `${p.id}: ${p.timestamp}`));
+        
         // Track if we found any new approved responses
         let foundNewApprovedResponses = false;
         
         // Debug each prompt's approval status
-        parsedPrompts.forEach((item: any) => {
+        sortedPrompts.forEach((item: any, index) => {
           // Convert to boolean explicitly
           const isApproved = item.isApproved === true;
-          console.log(`Prompt ${item.id}: isApproved=${isApproved}, original=${item.isApproved}, type=${typeof item.isApproved}`);
+          console.log(`Prompt ${index}:${item.id}: isApproved=${isApproved}, original=${item.isApproved}, type=${typeof item.isApproved}`);
           
           // Check if this is a new approved response the user hasn't seen yet
           if (isApproved && !seenResponses.has(item.id)) {
             foundNewApprovedResponses = true;
+            console.log(`New approved response found: ${item.id}`);
           }
         });
         
         // Process prompts to recreate AttachmentFile objects with preview URLs
-        const promptsWithFiles = parsedPrompts.map((prompt: any) => {
+        const promptsWithFiles = sortedPrompts.map((prompt: any) => {
           // Explicitly handle isApproved as a boolean
           const isApproved = prompt.isApproved === true;
           console.log(`Processing prompt ${prompt.id}, isApproved=${isApproved}, original=${prompt.isApproved}, type=${typeof prompt.isApproved}`);
@@ -911,6 +916,9 @@ const PatientDashboard = () => {
 
         // Log the processed prompts to verify approval status
         console.log('Final processed prompts:', promptsWithFiles);
+        promptsWithFiles.forEach((item, index) => {
+          console.log(`Processed ${index}: ${item.id}, isApproved=${item.isApproved}, timestamp=${item.timestamp}`);
+        });
         
         // Count unseen approved responses
         let unseenCount = 0;
@@ -1079,6 +1087,11 @@ const PatientDashboard = () => {
       try {
         existingItems = JSON.parse(existingData);
         console.log('Found existing items in localStorage:', existingItems.length);
+        
+        // Debug existing items approval status
+        existingItems.forEach(item => {
+          console.log(`Existing item ${item.id}: isApproved=${item.isApproved === true}, type=${typeof item.isApproved}`);
+        });
       } catch (error) {
         console.error('Error parsing existing localStorage data:', error);
       }
@@ -1087,29 +1100,36 @@ const PatientDashboard = () => {
     // Create a map of existing items by ID for quick lookup
     const existingMap = new Map();
     existingItems.forEach(item => {
-      existingMap.set(item.id, item);
+      // Store with explicit boolean conversion
+      existingMap.set(item.id, {
+        ...item,
+        isApproved: item.isApproved === true
+      });
     });
     
     // Create a simplified version suitable for storage
     const historyForStorage = history.map(item => {
       // Check if this item exists and has properties we want to preserve
       const existingItem = existingMap.get(item.id);
+      
+      // IMPORTANT: Always prioritize doctor-approved status from existing storage
+      // Only if the existing item was approved, keep it approved
       const wasApproved = existingItem && existingItem.isApproved === true;
-      
-      // Use the existing approval status if it was true, otherwise use the current one
-      const isApproved = wasApproved || item.isApproved === true;
-      
-      // Preserve the AI response - doctor might have edited it
-      const aiResponse = item.aiResponse || (existingItem ? existingItem.aiResponse : null);
+      const isApproved = wasApproved || (item.isApproved === true);
       
       console.log(`Item ${item.id}: wasApproved=${wasApproved}, currentApproval=${item.isApproved}, finalApproval=${isApproved}`);
+      
+      // For edited responses, preserve what the doctor edited
+      const aiResponse = existingItem?.editedResponse || 
+                         existingItem?.aiResponse || 
+                         item.aiResponse;
       
       return {
         id: item.id,
         text: item.text,
         timestamp: item.timestamp,
-        aiResponse: aiResponse,
-        responseStatus: item.responseStatus,
+        aiResponse: aiResponse, 
+        responseStatus: item.responseStatus || 'success',
         isApproved: isApproved, // Always boolean
         attachments: item.attachments ? item.attachments.map(a => ({
           id: a.id,
@@ -1126,8 +1146,12 @@ const PatientDashboard = () => {
       console.log(`Saving item ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
     });
 
+    // Sort by timestamp to ensure newest items are first
+    const sortedHistory = [...historyForStorage].sort((a, b) => b.timestamp - a.timestamp);
+    console.log('Sorted history for storage:', sortedHistory.map(item => `${item.id}: ${item.timestamp}`));
+
     // Use a temp variable to ensure storage event fires
-    const historyJson = JSON.stringify(historyForStorage);
+    const historyJson = JSON.stringify(sortedHistory);
     localStorage.removeItem('patientPromptHistory');
     localStorage.setItem('patientPromptHistory', historyJson);
     
@@ -1374,9 +1398,12 @@ const PatientDashboard = () => {
                 `${item.id}: ${item.isApproved === true ? 'approved' : 'not-approved'} (${typeof item.isApproved})`
               ));
               
-              // Filter for approved responses - explicitly use === true for comparison
-              const approvedResponses = promptHistory.filter(item => item.isApproved === true);
-              console.log('Filtered approved responses:', approvedResponses);
+              // Sort again by timestamp and filter for approved responses - explicitly use === true for comparison
+              const sortedHistory = [...promptHistory].sort((a, b) => b.timestamp - a.timestamp);
+              const approvedResponses = sortedHistory.filter(item => item.isApproved === true);
+              
+              console.log('Sorted History:', sortedHistory.map(item => `${item.id}: ${item.timestamp}`));
+              console.log('Filtered approved responses:', approvedResponses.map(item => item.id));
               console.log('Approved count:', approvedResponses.length);
               
               if (approvedResponses && approvedResponses.length > 0) {
