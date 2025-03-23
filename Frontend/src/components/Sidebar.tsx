@@ -111,14 +111,14 @@ const Sidebar = () => {
   
   // Navigation items with conditional rendering based on user role
   const navItems = [
-    { to: '/dashboard', icon: <FaHome />, text: 'Dashboard', roles: ['admin', 'doctor', 'patient'] },
-    { to: '/appointments', icon: <FaCalendarAlt />, text: 'Appointments', roles: ['admin', 'doctor', 'patient'] },
+    { to: '/dashboard', icon: <FaHome />, text: 'Dashboard', roles: ['admin', 'doctor', 'clinician', 'patient'] },
+    { to: '/appointments', icon: <FaCalendarAlt />, text: 'Appointments', roles: ['admin', 'doctor', 'clinician', 'patient'] },
     { to: '/doctors', icon: <FaUserMd />, text: 'Doctors', roles: ['admin', 'patient'] },
-    { to: '/patients', icon: <FaUser />, text: 'Patients', roles: ['admin', 'doctor'] },
-    { to: '/medical-records', icon: <FaClipboardList />, text: 'Medical Records', roles: ['doctor', 'patient'] },
-    { to: '/prescriptions', icon: <FaPills />, text: 'Prescriptions', roles: ['doctor', 'patient'] },
+    { to: '/patients', icon: <FaUser />, text: 'Patients', roles: ['admin', 'doctor', 'clinician'] },
+    { to: '/medical-records', icon: <FaClipboardList />, text: 'Medical Records', roles: ['doctor', 'clinician', 'patient'] },
+    { to: '/prescriptions', icon: <FaPills />, text: 'Prescriptions', roles: ['doctor', 'clinician', 'patient'] },
     { to: '/billing', icon: <FaFileInvoiceDollar />, text: 'Billing', roles: ['admin', 'patient'] },
-    { to: '/settings', icon: <FaCog />, text: 'Settings', roles: ['admin', 'doctor', 'patient'] },
+    { to: '/settings', icon: <FaCog />, text: 'Settings', roles: ['admin', 'doctor', 'clinician', 'patient'] },
   ]
   
   // Filter navigation items by user role

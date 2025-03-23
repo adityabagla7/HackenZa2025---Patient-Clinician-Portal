@@ -309,7 +309,7 @@ const Dashboard = () => {
       )
     }
     
-    if (user?.role === 'doctor') {
+    if (user?.role === 'doctor' || user?.role === 'clinician') {
       return (
         <StatsGrid>
           <StatCard>

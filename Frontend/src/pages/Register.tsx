@@ -1,10 +1,10 @@
+import axios from 'axios'
 import { ErrorMessage, Field, Form, Formik } from 'formik'
 import { useState } from 'react'
 import { FaEnvelope, FaHospital, FaLock, FaUser } from 'react-icons/fa'
 import { Link, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 import * as Yup from 'yup'
-import axios from 'axios'
 
 const RegisterContainer = styled.div`
   display: flex;
@@ -98,7 +98,17 @@ const FormDescription = styled.p`
 `
 
 const FormSection = styled.div`
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
   margin-bottom: 2rem;
+`
+
+const Subtitle = styled.p`
+  margin: 1rem 0;
+  color: #4a5568;
+  font-size: 1.125rem;
 `
 
 const SectionTitle = styled.h3`
@@ -310,38 +320,37 @@ const Register = () => {
       .email('Invalid email address')
       .required('Email is required'),
     password: Yup.string()
-      .min(8, 'Password must be at least 8 characters')
+      .min(6, 'Password must be at least 6 characters')
       .required('Password is required'),
     confirmPassword: Yup.string()
       .oneOf([Yup.ref('password')], 'Passwords must match')
-      .required('Please confirm your password'),
+      .required('Confirm password is required'),
+    phone: Yup.string()
+      .required('Phone number is required'),
     countryCode: Yup.string()
       .required('Country code is required'),
-    phone: Yup.string()
-      .matches(/^[0-9]{10}$/, 'Phone number must be 10 digits')
-      .required('Phone number is required'),
     age: Yup.number()
-      .min(1, 'Age must be at least 1')
-      .max(120, 'Age cannot exceed 120')
+      .typeError('Age must be a number')
+      .positive('Age must be a positive number')
       .required('Age is required'),
     height: Yup.number()
-      .min(30, 'Height must be at least 30 cm')
-      .max(250, 'Height cannot exceed 250 cm')
+      .typeError('Height must be a number')
+      .positive('Height must be a positive number')
       .required('Height is required'),
     weight: Yup.number()
-      .min(1, 'Weight must be at least 1 kg')
-      .max(300, 'Weight cannot exceed 300 kg')
+      .typeError('Weight must be a number')
+      .positive('Weight must be a positive number')
       .required('Weight is required'),
     bloodGroup: Yup.string()
       .required('Blood group is required'),
     allergies: Yup.string()
-      .required('Please select an option'),
+      .required('Please select an allergy option'),
     otherAllergies: Yup.string()
-      .when('allergies', (allergies, schema) => 
-        allergies === 'Other (please specify)' 
-          ? schema.required('Please specify your allergies') 
-          : schema
-      )
+      .when('allergies', {
+        is: 'Other (please specify)',
+        then: Yup.string().required('Please specify your allergies'),
+        otherwise: Yup.string()
+      })
   });
   
   // Initial form values
@@ -432,7 +441,7 @@ const Register = () => {
             <LogoIcon>
               <FaHospital />
             </LogoIcon>
-            <LogoText>Clinic Portal</LogoText>
+            <LogoText>HealthSync</LogoText>
           </LogoContainer>
           <HeaderActions>
             <HeaderButton onClick={() => navigate('/login')}>Log In</HeaderButton>
@@ -675,7 +684,7 @@ const Register = () => {
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Creating Account...' : 'Create Account'}
                 </Button>
-                
+            
                 <FormFooter>
                   Already have an account? <FooterLink to="/login">Sign in</FooterLink>
                 </FormFooter>
@@ -685,7 +694,7 @@ const Register = () => {
         </RegisterFormContainer>
       </RegisterContent>
     </RegisterContainer>
-  )
+  );
 };
 
 export default Register 

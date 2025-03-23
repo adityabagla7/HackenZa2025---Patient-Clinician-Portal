@@ -89,32 +89,62 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
     
     try {
-      // Determine role based on email
-      const userRole: User['role'] = 
-        email.toLowerCase().includes('doctor') || email.toLowerCase().includes('clinician') 
-          ? 'doctor' 
-          : 'patient';
+      // Validate clinician credentials
+      if (email.toLowerCase() === 'doctor@pharmacy.in') {
+        if (password === '1234COCU') {
+          // Valid clinician login
+          const mockUser: User = {
+            id: 'doc123',
+            name: 'Doctor',
+            email: email,
+            role: 'clinician'
+          };
+          
+          // Store user info
+          const mockToken = 'mock-jwt-token';
+          sessionStorage.setItem('token', mockToken);
+          sessionStorage.setItem('user', JSON.stringify(mockUser));
+          setUser(mockUser);
+          return Promise.resolve();
+        } else {
+          // Invalid password for clinician
+          setError('Invalid password for clinician');
+          return Promise.reject(new Error('Invalid password'));
+        }
+      }
       
-      // MOCK LOGIN - No backend API call for the demo
-      // Create a mock token and user based on email
-      const mockUser: User = {
-        id: '123456',
-        name: email.split('@')[0],
-        email: email,
-        role: userRole
-      };
+      // Validate patient credentials
+      const validPatientCredentials = [
+        { email: 'patient1@gmail.com', password: 'patient1' },
+        { email: 'patient2@gmail.com', password: 'patient2' },
+        { email: 'patient3@gmail.com', password: 'patient3' },
+        { email: 'patient4@gmail.com', password: 'patient4' }
+      ];
       
-      // Create a mock token that contains the user info
-      const mockToken = 'mock-jwt-token';
+      const matchedPatient = validPatientCredentials.find(
+        cred => cred.email === email && cred.password === password
+      );
       
-      // Store mock token and user in sessionStorage instead of localStorage
-      sessionStorage.setItem('token', mockToken);
-      sessionStorage.setItem('user', JSON.stringify(mockUser));
+      if (matchedPatient) {
+        // Valid patient login
+        const mockUser: User = {
+          id: `pat_${Date.now()}`,
+          name: email.split('@')[0],
+          email: email,
+          role: 'patient'
+        };
+        
+        // Store user info
+        const mockToken = 'mock-jwt-token';
+        sessionStorage.setItem('token', mockToken);
+        sessionStorage.setItem('user', JSON.stringify(mockUser));
+        setUser(mockUser);
+        return Promise.resolve();
+      }
       
-      // Set user
-      setUser(mockUser);
-      
-      return Promise.resolve();
+      // If we get here, credentials were invalid
+      setError('Invalid email or password');
+      return Promise.reject(new Error('Invalid credentials'));
     } catch (err: any) {
       setError('An error occurred during login');
       return Promise.reject(err);

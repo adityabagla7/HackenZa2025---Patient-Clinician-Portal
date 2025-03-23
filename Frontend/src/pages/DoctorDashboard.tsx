@@ -1,24 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
-    FaCalendarAlt,
+    FaBell,
+    FaCheck,
+    FaCheckCircle,
     FaClipboardList,
     FaClock,
+    FaCommentMedical,
+    FaEdit,
     FaEllipsisV,
+    FaFileAlt,
     FaPills,
     FaPlus,
-    FaSearch,
-    FaUser,
     FaReply,
-    FaFileAlt,
-    FaCommentMedical,
-    FaCheck,
-    FaEdit,
-    FaCheckCircle,
-    FaBell
+    FaSearch,
+    FaUser
 } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
-import { updateApprovedResponses, getUnreadNotificationsCount, getNotifications, markNotificationAsRead, Notification } from '../services/api'
+import { getNotifications, getUnreadNotificationsCount, markNotificationAsRead, Notification, updateApprovedResponses } from '../services/api'
 
 const PageTitle = styled.h1`
   margin-bottom: 2rem;
@@ -484,19 +483,22 @@ interface PatientQuery {
 
 const QueryCard = styled(Card)`
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
 `
 
 const QueryHeader = styled.div`
-  padding: 1.25rem;
+  padding: 1.5rem;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background-color: #f8fafc;
 `
 
 const QueryTitle = styled.h3`
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.35rem;
+  font-weight: 700;
   color: #2d3748;
   margin: 0;
 `
@@ -507,13 +509,22 @@ const QueryDate = styled.div`
 `
 
 const QueryList = styled.div`
-  max-height: 400px;
+  max-height: 600px;
   overflow-y: auto;
 `
 
 const QueryItem = styled.div`
-  padding: 1.25rem;
+  padding: 1.5rem;
   border-bottom: 1px solid #e2e8f0;
+  transition: background-color 0.2s ease;
+  
+  &:nth-child(even) {
+    background-color: #fafafa;
+  }
+  
+  &:hover {
+    background-color: #f7fafc;
+  }
   
   &:last-child {
     border-bottom: none;
@@ -1037,7 +1048,7 @@ const DoctorDashboard = () => {
     
     // Add notification event listener
     const handleNotificationsUpdated = (event: CustomEvent) => {
-      if (event.detail?.role === 'doctor') {
+      if (event.detail?.role === 'doctor' || event.detail?.role === 'clinician') {
         loadNotificationsCount();
       }
     };
@@ -1469,163 +1480,163 @@ const DoctorDashboard = () => {
         </StatCard>
       </StatsGrid>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Section>
-            <QueryCard>
-              <QueryHeader>
-                <QueryTitle>Patient Queries</QueryTitle>
-                <QueryDate>{new Date().toLocaleDateString()}</QueryDate>
-              </QueryHeader>
-              
-              <QueryList>
-                {patientQueries.length > 0 ? (
-                  patientQueries.map((query) => (
-                    <QueryItem key={query.id}>
-                      <QueryTime>
-                        <FaClock />
-                        {formatDate(query.timestamp)}
-                        {query.isUrgent && (
-                          <UrgencyBadge>
-                            <FaBell style={{ marginRight: '0.25rem' }} />
-                            URGENT
-                          </UrgencyBadge>
+      {/* Patient Queries Section - Full Width */}
+      <Section style={{ marginBottom: '2rem' }}>
+        <QueryCard>
+          <QueryHeader>
+            <QueryTitle>Patient Queries</QueryTitle>
+            <QueryDate>{new Date().toLocaleDateString()}</QueryDate>
+          </QueryHeader>
+          
+          <QueryList>
+            {patientQueries.length > 0 ? (
+              patientQueries.map((query) => (
+                <QueryItem key={query.id}>
+                  <QueryTime>
+                    <FaClock />
+                    {formatDate(query.timestamp)}
+                    {query.isUrgent && (
+                      <UrgencyBadge>
+                        <FaBell style={{ marginRight: '0.25rem' }} />
+                        URGENT
+                      </UrgencyBadge>
+                    )}
+                  </QueryTime>
+                  <QueryPatient>
+                    {query.patientName || 'Anonymous Patient'}
+                  </QueryPatient>
+                  <QueryText>{query.text}</QueryText>
+                  
+                  {query.attachments && query.attachments.length > 0 && (
+                    <AttachmentsList>
+                      {query.attachments.map(attachment => (
+                        <AttachmentBadge key={attachment.id} type={attachment.type}>
+                          {attachment.type === 'image' && <FaFileAlt />}
+                          {attachment.type === 'video' && <FaFileAlt />}
+                          {attachment.type === 'file' && <FaFileAlt />}
+                          {attachment.fileName}
+                        </AttachmentBadge>
+                      ))}
+                    </AttachmentsList>
+                  )}
+                  
+                  {/* Display Gemini's AI Response - Loading state */}
+                  {query.responseStatus === 'loading' && (
+                    <GeminiResponseContainer>
+                      <GeminiResponseTitle>
+                        <FaCommentMedical />
+                        AI Analysis
+                        <ResponseStatusBadge status="loading">
+                          Analyzing...
+                        </ResponseStatusBadge>
+                      </GeminiResponseTitle>
+                      <GeminiResponseText>Analyzing patient query...</GeminiResponseText>
+                    </GeminiResponseContainer>
+                  )}
+                  
+                  {/* Display Gemini's AI Response - Error state */}
+                  {query.responseStatus === 'error' && (
+                    <GeminiResponseContainer>
+                      <GeminiResponseTitle>
+                        <FaCommentMedical />
+                        AI Analysis
+                        <ResponseStatusBadge status="error">
+                          Failed
+                        </ResponseStatusBadge>
+                      </GeminiResponseTitle>
+                      <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>
+                    </GeminiResponseContainer>
+                  )}
+                  
+                  {/* Display Gemini's AI Response - Success state */}
+                  {query.responseStatus === 'success' && query.aiResponse && (
+                    <GeminiResponseContainer>
+                      <GeminiResponseTitle>
+                        <FaCommentMedical />
+                        AI Analysis
+                        <ResponseStatusBadge status="success">
+                          Complete
+                        </ResponseStatusBadge>
+                        {query.isApproved ? (
+                          <ResponseStatusBadge status="success">Doctor Verified</ResponseStatusBadge>
+                        ) : (
+                          <UnverifiedBadge>
+                            <FaCommentMedical />
+                            Needs Verification
+                          </UnverifiedBadge>
                         )}
-                      </QueryTime>
-                      <QueryPatient>
-                        {query.patientName || 'Anonymous Patient'}
-                      </QueryPatient>
-                      <QueryText>{query.text}</QueryText>
+                      </GeminiResponseTitle>
                       
-                      {query.attachments && query.attachments.length > 0 && (
-                        <AttachmentsList>
-                          {query.attachments.map(attachment => (
-                            <AttachmentBadge key={attachment.id} type={attachment.type}>
-                              {attachment.type === 'image' && <FaFileAlt />}
-                              {attachment.type === 'video' && <FaFileAlt />}
-                              {attachment.type === 'file' && <FaFileAlt />}
-                              {attachment.fileName}
-                            </AttachmentBadge>
-                          ))}
-                        </AttachmentsList>
-                      )}
-                      
-                      {/* Display Gemini's AI Response - Loading state */}
-                      {query.responseStatus === 'loading' && (
-                        <GeminiResponseContainer>
-                          <GeminiResponseTitle>
-                            <FaCommentMedical />
-                            AI Analysis
-                            <ResponseStatusBadge status="loading">
-                              Analyzing...
-                            </ResponseStatusBadge>
-                          </GeminiResponseTitle>
-                          <GeminiResponseText>Analyzing patient query...</GeminiResponseText>
-                        </GeminiResponseContainer>
-                      )}
-                      
-                      {/* Display Gemini's AI Response - Error state */}
-                      {query.responseStatus === 'error' && (
-                        <GeminiResponseContainer>
-                          <GeminiResponseTitle>
-                            <FaCommentMedical />
-                            AI Analysis
-                            <ResponseStatusBadge status="error">
-                              Failed
-                            </ResponseStatusBadge>
-                          </GeminiResponseTitle>
-                          <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>
-                        </GeminiResponseContainer>
-                      )}
-                      
-                      {/* Display Gemini's AI Response - Success state */}
-                      {query.responseStatus === 'success' && query.aiResponse && (
-                        <GeminiResponseContainer>
-                          <GeminiResponseTitle>
-                            <FaCommentMedical />
-                            AI Analysis
-                            <ResponseStatusBadge status="success">
-                              Complete
-                            </ResponseStatusBadge>
-                            {query.isApproved ? (
-                              <ResponseStatusBadge status="success">Doctor Verified</ResponseStatusBadge>
-                            ) : (
-                              <UnverifiedBadge>
-                                <FaCommentMedical />
-                                Needs Verification
-                              </UnverifiedBadge>
-                            )}
-                          </GeminiResponseTitle>
-                          
-                          {query.isEditing ? (
-                            // Display edit mode
-                            <>
-                              <EditResponseTextarea
-                                value={query.editedResponse || ''}
-                                onChange={(e) => handleEditResponseChange(query.id, e.target.value)}
-                                placeholder="Edit the AI response here..."
-                              />
-                              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                <ActionButton variant="primary" onClick={() => handleSaveEditedResponse(query.id)}>
-                                  <FaCheck />
-                                  Save Edits
-                                </ActionButton>
-                                <ActionButton variant="outline" onClick={() => handleEditResponse(query.id)}>
-                                  Cancel
-                                </ActionButton>
-                              </div>
-                            </>
-                          ) : (
-                            // Display normal view
-                            <ResponseText>
-                              <SimpleMarkdown content={query.editedResponse || query.aiResponse || ''} />
-                            </ResponseText>
-                          )}
-                          
-                          {/* Show success message after approval */}
-                          {approvedQueries.has(query.id) && (
-                            <SuccessMessage>
-                              <FaCheckCircle />
-                              Response verified! Patients can now see this as verified.
-                            </SuccessMessage>
-                          )}
-                        </GeminiResponseContainer>
-                      )}
-                      
-                      <AppointmentActions>
-                        {query.responseStatus === 'success' && !query.isApproved && (
-                          <>
-                            <ActionButton variant="primary" onClick={() => handleApproveResponse(query.id)}>
+                      {query.isEditing ? (
+                        // Display edit mode
+                        <>
+                          <EditResponseTextarea
+                            value={query.editedResponse || ''}
+                            onChange={(e) => handleEditResponseChange(query.id, e.target.value)}
+                            placeholder="Edit the AI response here..."
+                          />
+                          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                            <ActionButton variant="primary" onClick={() => handleSaveEditedResponse(query.id)}>
                               <FaCheck />
-                              Verify Response
+                              Save Edits
                             </ActionButton>
                             <ActionButton variant="outline" onClick={() => handleEditResponse(query.id)}>
-                              <FaEdit />
-                              Edit Response
+                              Cancel
                             </ActionButton>
-                          </>
-                        )}
-                        {query.isApproved && (
-                          <ActionButton variant="secondary" disabled>
-                            <FaCheck />
-                            Verified
-                          </ActionButton>
-                        )}
-                        <ActionButton variant="outline">View Patient Records</ActionButton>
-                      </AppointmentActions>
-                    </QueryItem>
-                  ))
-                ) : (
-                  <QueryItem>
-                    <QueryText>No patient queries available at this time.</QueryText>
-                  </QueryItem>
-                )}
-              </QueryList>
-            </QueryCard>
-          </Section>
-        </div>
-        
-        <div>
+                          </div>
+                        </>
+                      ) : (
+                        // Display normal view
+                        <ResponseText>
+                          <SimpleMarkdown content={query.editedResponse || query.aiResponse || ''} />
+                        </ResponseText>
+                      )}
+                      
+                      {/* Show success message after approval */}
+                      {approvedQueries.has(query.id) && (
+                        <SuccessMessage>
+                          <FaCheckCircle />
+                          Response verified! Patients can now see this as verified.
+                        </SuccessMessage>
+                      )}
+                    </GeminiResponseContainer>
+                  )}
+                  
+                  <AppointmentActions>
+                    {query.responseStatus === 'success' && !query.isApproved && (
+                      <>
+                        <ActionButton variant="primary" onClick={() => handleApproveResponse(query.id)}>
+                          <FaCheck />
+                          Verify Response
+                        </ActionButton>
+                        <ActionButton variant="outline" onClick={() => handleEditResponse(query.id)}>
+                          <FaEdit />
+                          Edit Response
+                        </ActionButton>
+                      </>
+                    )}
+                    {query.isApproved && (
+                      <ActionButton variant="secondary" disabled>
+                        <FaCheck />
+                        Verified
+                      </ActionButton>
+                    )}
+                    <ActionButton variant="outline">View Patient Records</ActionButton>
+                  </AppointmentActions>
+                </QueryItem>
+              ))
+            ) : (
+              <QueryItem>
+                <QueryText>No patient queries available at this time.</QueryText>
+              </QueryItem>
+            )}
+          </QueryList>
+        </QueryCard>
+      </Section>
+      
+      {/* Secondary Content - Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
           <Section>
             <SectionHeader>
               <TabsContainer>

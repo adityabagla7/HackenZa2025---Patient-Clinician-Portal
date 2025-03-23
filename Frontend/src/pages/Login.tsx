@@ -236,7 +236,6 @@ const Login = () => {
       .email('Invalid email address')
       .required('Email is required'),
     password: Yup.string()
-      .min(6, 'Password must be at least 6 characters')
       .required('Password is required'),
   })
   
@@ -315,7 +314,7 @@ const Login = () => {
                           type="email"
                           id="email"
                           name="email"
-                          placeholder="patient@example.com"
+                          placeholder="Enter your email"
                         />
                       </InputGroup>
                       <ErrorMessage name="email">
@@ -333,7 +332,7 @@ const Login = () => {
                           type="password"
                           id="password"
                           name="password"
-                          placeholder="••••••••"
+                          placeholder="Enter your password"
                         />
                       </InputGroup>
                       <ErrorMessage name="password">
@@ -377,14 +376,8 @@ const Login = () => {
                 validationSchema={validationSchema}
                 onSubmit={(values, formikBag) => {
                   setUserType('clinician');
-                  // Modify the email to indicate this is a clinician login
-                  const clinicianValues = {
-                    ...values,
-                    email: values.email.includes('@') 
-                      ? values.email.replace('@', '-clinician@') 
-                      : `${values.email}-clinician@example.com`
-                  };
-                  handleSubmit(clinicianValues, formikBag);
+                  // Pass the values directly to the login function without modification
+                  handleSubmit(values, formikBag);
                 }}
               >
                 {({ isSubmitting }) => (
@@ -399,7 +392,7 @@ const Login = () => {
                           type="email"
                           id="clinician_email"
                           name="email"
-                          placeholder="doctor@example.com"
+                          placeholder="Enter your email"
                         />
                       </InputGroup>
                       <ErrorMessage name="email">
@@ -417,7 +410,7 @@ const Login = () => {
                           type="password"
                           id="clinician_password"
                           name="password"
-                          placeholder="••••••••"
+                          placeholder="Enter your password"
                         />
                       </InputGroup>
                       <ErrorMessage name="password">
