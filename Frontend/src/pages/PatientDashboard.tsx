@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { FaCalendarAlt, FaClipboardList, FaFileInvoiceDollar, FaPills, FaPlus, FaUserMd, FaPaperPlane, FaFileUpload, FaImage, FaVideo, FaFile, FaTimes, FaUser, FaCheckCircle, FaCommentMedical, FaClock } from 'react-icons/fa'
+import { useEffect, useRef, useState } from 'react'
+import { FaCheckCircle, FaClock, FaCommentMedical, FaFile, FaFileUpload, FaMicrophone, FaPaperPlane, FaStop, FaTimes } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
 import { getAIResponse } from '../services/api'
@@ -793,6 +793,58 @@ const ResponseStatusBadge = styled.span<{ status: 'loading' | 'success' | 'error
   }};
 `
 
+// Voice Button styles
+const VoiceButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background-color: ${props => props.disabled ? '#a0aec0' : props.color || '#3182ce'};
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  transition: all 0.2s;
+  font-size: 0.875rem;
+  
+  &:hover {
+    background-color: ${props => props.disabled ? '#a0aec0' : '#2c5282'};
+  }
+  
+  svg {
+    margin-right: 0.5rem;
+  }
+`;
+
+const RecordingIndicator = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: #f56565;
+  color: white;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  animation: pulse 1.5s infinite;
+  
+  @keyframes pulse {
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  
+  svg {
+    margin-right: 0.5rem;
+  }
+`;
+
 const PatientDashboard = () => {
   const { user } = useAuth()
   const [prompt, setPrompt] = useState<string>('')
@@ -801,6 +853,12 @@ const PatientDashboard = () => {
   const [fileError, setFileError] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Voice recognition state
+  const [isRecording, setIsRecording] = useState<boolean>(false)
+  const [recognitionSupported, setRecognitionSupported] = useState<boolean>(true)
+  const recognitionRef = useRef<any>(null)
+  const [interimTranscript, setInterimTranscript] = useState<string>('')
   
   // Allowed file types
   const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -1205,6 +1263,102 @@ const PatientDashboard = () => {
     }
   };
   
+  // Check if speech recognition is supported
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setRecognitionSupported(false);
+      console.log('Speech recognition not supported in this browser');
+    }
+  }, []);
+  
+  // Function to start voice recognition
+  const startVoiceRecognition = () => {
+    if (!recognitionSupported) return;
+    
+    // Create recognition object with browser prefix if needed
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (SpeechRecognitionAPI) {
+      recognitionRef.current = new SpeechRecognitionAPI();
+      const recognition = recognitionRef.current;
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      
+      recognition.onstart = () => {
+        setIsRecording(true);
+        setInterimTranscript('');
+        console.log('Voice recognition started');
+      };
+      
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        let currentInterimTranscript = '';
+        
+        // Process the results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            currentInterimTranscript += transcript;
+          }
+        }
+        
+        // Update the prompt with final results
+        if (finalTranscript) {
+          setPrompt(prev => {
+            const newValue = prev + ' ' + finalTranscript;
+            return newValue.trim();
+          });
+        }
+        
+        // Update interim transcript for display
+        setInterimTranscript(currentInterimTranscript);
+      };
+      
+      recognition.onerror = (event: any) => {
+        console.error('Voice recognition error:', event.error);
+        stopVoiceRecognition();
+      };
+      
+      recognition.onend = () => {
+        // Add any remaining interim transcript as final when speech ends
+        if (interimTranscript) {
+          setPrompt(prev => {
+            const newValue = prev + ' ' + interimTranscript;
+            return newValue.trim();
+          });
+          setInterimTranscript('');
+        }
+        setIsRecording(false);
+        console.log('Voice recognition ended');
+      };
+      
+      recognition.start();
+    }
+  };
+  
+  // Function to stop voice recognition
+  const stopVoiceRecognition = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+      setIsRecording(false);
+    }
+  };
+  
+  // Toggle voice recognition
+  const toggleVoiceRecognition = () => {
+    if (isRecording) {
+      stopVoiceRecognition();
+    } else {
+      startVoiceRecognition();
+    }
+  };
+  
   return (
     <div>
       <PageTitle>Patient Dashboard</PageTitle>
@@ -1235,9 +1389,16 @@ const PatientDashboard = () => {
           <PromptDescription>
             Ask health-related questions and receive AI-generated responses immediately. Doctors will verify responses for medical accuracy.
           </PromptDescription>
+          
+          {isRecording && (
+            <RecordingIndicator>
+              <FaMicrophone /> Recording your voice... Speak clearly into your microphone
+            </RecordingIndicator>
+          )}
+          
           <PromptForm onSubmit={handleSubmit}>
             <PromptTextarea 
-              value={prompt}
+              value={isRecording ? `${prompt}${interimTranscript ? ' ' + interimTranscript : ''}` : prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe your symptoms, ask about lab reports, request medicine recommendations, or any other health-related questions..."
             />
@@ -1286,6 +1447,26 @@ const PatientDashboard = () => {
                     ref={fileInputRef}
                   />
                 </FileUploadButton>
+                
+                {recognitionSupported && (
+                  <VoiceButton 
+                    type="button"
+                    onClick={toggleVoiceRecognition}
+                    color={isRecording ? '#e53e3e' : '#3182ce'}
+                  >
+                    {isRecording ? (
+                      <>
+                        <FaStop />
+                        Stop Recording
+                      </>
+                    ) : (
+                      <>
+                        <FaMicrophone />
+                        Voice Input
+                      </>
+                    )}
+                  </VoiceButton>
+                )}
               </FormActions>
               
               <PromptButton type="submit" disabled={(!prompt.trim() && attachments.length === 0) || isSubmitting}>
@@ -1486,3 +1667,11 @@ const PatientDashboard = () => {
 }
 
 export default PatientDashboard 
+
+// Add these TypeScript declarations for the Speech Recognition API
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+} 
