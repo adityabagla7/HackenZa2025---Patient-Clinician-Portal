@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FaBell, FaCog, FaSignOutAlt, FaUser } from 'react-icons/fa'
+import { FaCog, FaSignOutAlt, FaUser } from 'react-icons/fa'
 import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
@@ -172,11 +172,6 @@ const Navbar = () => {
       <Logo>Clinic Portal</Logo>
       
       <NavbarRight>
-        <IconButton>
-          <FaBell />
-          <NotificationBadge>3</NotificationBadge>
-        </IconButton>
-        
         <UserMenu onClick={() => setMenuOpen(!menuOpen)}>
           <UserAvatar>
             <FaUser />

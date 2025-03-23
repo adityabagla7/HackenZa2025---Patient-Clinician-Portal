@@ -27,6 +27,99 @@ export interface QueryHistoryItem {
   }[];
 }
 
+// Add notification interfaces and functions
+export interface Notification {
+  id: string;
+  type: 'new_query' | 'doctor_response';
+  timestamp: number;
+  relatedId: string;
+  text: string;
+  isRead: boolean;
+}
+
+// Save notifications to localStorage
+export const saveNotification = (notification: Notification, forRole: 'doctor' | 'patient') => {
+  const storageKey = forRole === 'doctor' ? 'doctorNotifications' : 'patientNotifications';
+  try {
+    // Get existing notifications
+    const existingData = localStorage.getItem(storageKey);
+    const notifications: Notification[] = existingData ? JSON.parse(existingData) : [];
+    
+    // Add new notification
+    notifications.unshift(notification);
+    
+    // Save to localStorage
+    localStorage.setItem(storageKey, JSON.stringify(notifications));
+    
+    // Trigger a custom event so other tabs/windows can be notified
+    window.dispatchEvent(new CustomEvent('notifications-updated', { 
+      detail: { role: forRole } 
+    }));
+    
+    return true;
+  } catch (error) {
+    console.error(`Error saving ${forRole} notification:`, error);
+    return false;
+  }
+};
+
+// Get notifications count
+export const getUnreadNotificationsCount = (forRole: 'doctor' | 'patient'): number => {
+  const storageKey = forRole === 'doctor' ? 'doctorNotifications' : 'patientNotifications';
+  try {
+    const existingData = localStorage.getItem(storageKey);
+    if (!existingData) return 0;
+    
+    const notifications: Notification[] = JSON.parse(existingData);
+    return notifications.filter(n => !n.isRead).length;
+  } catch (error) {
+    console.error(`Error getting ${forRole} notifications count:`, error);
+    return 0;
+  }
+};
+
+// Mark notification as read
+export const markNotificationAsRead = (notificationId: string, forRole: 'doctor' | 'patient'): boolean => {
+  const storageKey = forRole === 'doctor' ? 'doctorNotifications' : 'patientNotifications';
+  try {
+    const existingData = localStorage.getItem(storageKey);
+    if (!existingData) return false;
+    
+    const notifications: Notification[] = JSON.parse(existingData);
+    const updatedNotifications = notifications.map(notification => 
+      notification.id === notificationId 
+        ? { ...notification, isRead: true } 
+        : notification
+    );
+    
+    localStorage.setItem(storageKey, JSON.stringify(updatedNotifications));
+    
+    // Trigger a custom event
+    window.dispatchEvent(new CustomEvent('notifications-updated', { 
+      detail: { role: forRole } 
+    }));
+    
+    return true;
+  } catch (error) {
+    console.error(`Error marking ${forRole} notification as read:`, error);
+    return false;
+  }
+};
+
+// Get all notifications
+export const getNotifications = (forRole: 'doctor' | 'patient'): Notification[] => {
+  const storageKey = forRole === 'doctor' ? 'doctorNotifications' : 'patientNotifications';
+  try {
+    const existingData = localStorage.getItem(storageKey);
+    if (!existingData) return [];
+    
+    return JSON.parse(existingData);
+  } catch (error) {
+    console.error(`Error getting ${forRole} notifications:`, error);
+    return [];
+  }
+};
+
 // Function to get AI-generated response for a patient prompt
 export const getAIResponse = async (prompt: string): Promise<string> => {
   try {
@@ -71,6 +164,21 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
         const updatedPrompts = prompts.map((prompt: any) => {
           if (prompt.id === queryId) {
             console.log(`API: Updating query ${queryId} verification status from ${prompt.isApproved ? 'VERIFIED' : 'UNVERIFIED'} to ${isApproved ? 'VERIFIED' : 'UNVERIFIED'}`);
+            
+            // Create a notification for the patient if the doctor is approving the response
+            if (isApproved) {
+              const queryText = prompt.text || '';
+              const notificationText = `Doctor has verified your query: "${queryText.length > 40 ? queryText.substring(0, 40) + '...' : queryText}"`;
+              
+              saveNotification({
+                id: `notification-${Date.now()}`,
+                type: 'doctor_response',
+                timestamp: Date.now(),
+                relatedId: queryId,
+                text: notificationText,
+                isRead: false
+              }, 'patient');
+            }
             
             // Create a new object to avoid reference issues
             return { 

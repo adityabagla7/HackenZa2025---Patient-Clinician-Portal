@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { FaCheckCircle, FaClock, FaCommentMedical, FaFile, FaFileUpload, FaMicrophone, FaPaperPlane, FaStop, FaTimes } from 'react-icons/fa'
+import { FaCheckCircle, FaClock, FaCommentMedical, FaFile, FaFileUpload, FaMicrophone, FaPaperPlane, FaStop, FaTimes, FaBell } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
-import { getAIResponse } from '../services/api'
+import { getAIResponse, saveNotification, getUnreadNotificationsCount, getNotifications, markNotificationAsRead } from '../services/api'
 // import ReactMarkdown from 'react-markdown' // Uncomment after package is installed
 
 const PageTitle = styled.h1`
@@ -845,6 +845,107 @@ const RecordingIndicator = styled.div`
   }
 `;
 
+// Add a notification bell icon component
+const NotificationBell = styled.div<{ hasNotifications: boolean }>`
+  position: relative;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: ${({ hasNotifications }) => (hasNotifications ? '#3182ce' : '#718096')};
+  transition: color 0.2s;
+  
+  &:hover {
+    color: #3182ce;
+  }
+`
+
+const NotificationCounter = styled.div`
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #e53e3e;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+`
+
+const NotificationsContainer = styled.div`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  z-index: 100;
+  max-height: 400px;
+  overflow-y: auto;
+`
+
+const NotificationItem = styled.div`
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #f7fafc;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+`
+
+const NotificationHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background-color: #f7fafc;
+  border-bottom: 1px solid #e2e8f0;
+`
+
+const NotificationTitle = styled.div`
+  font-weight: 600;
+  color: #2d3748;
+`
+
+const NotificationClearAll = styled.button`
+  background: none;
+  border: none;
+  color: #3182ce;
+  font-size: 0.875rem;
+  cursor: pointer;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const NotificationText = styled.div`
+  font-size: 0.875rem;
+  color: #4a5568;
+`
+
+const NotificationTime = styled.div`
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.25rem;
+`
+
+const NotificationEmpty = styled.div`
+  padding: 2rem;
+  text-align: center;
+  color: #a0aec0;
+`
+
 const PatientDashboard = () => {
   const { user } = useAuth()
   const [prompt, setPrompt] = useState<string>('')
@@ -874,6 +975,12 @@ const PatientDashboard = () => {
   
   // Add state for tracking unseen approved responses count
   const [unseenResponseCount, setUnseenResponseCount] = useState<number>(0);
+  
+  // Add state for notifications
+  const [notificationCount, setNotificationCount] = useState<number>(0);
+  
+  // Add state for notifications panel
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
   
   // Load prompt history from localStorage on component mount
   useEffect(() => {
@@ -1086,6 +1193,19 @@ const PatientDashboard = () => {
       responseStatus: 'loading',
       isApproved: false
     }
+    
+    // Create a notification for the doctor
+    const patientName = user?.name || 'A patient';
+    const notificationText = `${patientName} submitted a new query: "${prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt}"`;
+    
+    saveNotification({
+      id: `notification-${Date.now()}`,
+      type: 'new_query',
+      timestamp: Date.now(),
+      relatedId: newPromptId,
+      text: notificationText,
+      isRead: false
+    }, 'doctor');
     
     // Update history state immediately with 'loading' status
     const updatedHistory = [newPrompt, ...promptHistory]
@@ -1359,9 +1479,117 @@ const PatientDashboard = () => {
     }
   };
   
+  // Add handler for notifications
+  const handleNotificationsUpdated = (event: CustomEvent) => {
+    if (event.detail?.role === 'patient') {
+      loadNotificationsCount();
+    }
+  };
+
+  // Add event listener for custom notification events
+  useEffect(() => {
+    window.addEventListener('notifications-updated', 
+      handleNotificationsUpdated as EventListener);
+
+    // Initial load
+    loadNotificationsCount();
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('notifications-updated', 
+        handleNotificationsUpdated as EventListener);
+    };
+  }, []);
+
+  // Add this function in the component
+  const loadNotificationsCount = () => {
+    const count = getUnreadNotificationsCount('patient');
+    setNotificationCount(count);
+  };
+
+  // Add this function in the component
+  const markNotificationsAsRead = () => {
+    const notifications = getNotifications('patient');
+    notifications.forEach(notification => {
+      if (!notification.isRead) {
+        markNotificationAsRead(notification.id, 'patient');
+      }
+    });
+    loadNotificationsCount();
+  };
+  
   return (
     <div>
-      <PageTitle>Patient Dashboard</PageTitle>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '1.5rem' 
+      }}>
+        <PageTitle>Patient Dashboard</PageTitle>
+        
+        <div style={{ position: 'relative' }}>
+          <NotificationBell 
+            hasNotifications={notificationCount > 0}
+            onClick={() => {
+              setShowNotifications(!showNotifications);
+              if (!showNotifications && notificationCount > 0) {
+                markNotificationsAsRead();
+              }
+            }}
+          >
+            <FaBell />
+            {notificationCount > 0 && (
+              <NotificationCounter>{notificationCount}</NotificationCounter>
+            )}
+          </NotificationBell>
+          
+          {showNotifications && (
+            <NotificationsContainer>
+              <NotificationHeader>
+                <NotificationTitle>Notifications</NotificationTitle>
+                <NotificationClearAll onClick={markNotificationsAsRead}>
+                  Mark all as read
+                </NotificationClearAll>
+              </NotificationHeader>
+              
+              {(() => {
+                const notifications = getNotifications('patient');
+                
+                if (notifications.length === 0) {
+                  return (
+                    <NotificationEmpty>
+                      No notifications
+                    </NotificationEmpty>
+                  );
+                }
+                
+                return notifications.map(notification => (
+                  <NotificationItem 
+                    key={notification.id}
+                    onClick={() => {
+                      markNotificationAsRead(notification.id, 'patient');
+                      // If it's a doctor response, switch to responses tab
+                      if (notification.type === 'doctor_response') {
+                        handleTabClick('responses');
+                      }
+                      setShowNotifications(false);
+                    }}
+                    style={{
+                      backgroundColor: notification.isRead ? 'transparent' : '#ebf8ff'
+                    }}
+                  >
+                    <NotificationText>{notification.text}</NotificationText>
+                    <NotificationTime>
+                      {new Date(notification.timestamp).toLocaleString()}
+                    </NotificationTime>
+                  </NotificationItem>
+                ));
+              })()}
+            </NotificationsContainer>
+          )}
+        </div>
+      </div>
       
       {/* Add Tab Navigation */}
       <TabsContainer>

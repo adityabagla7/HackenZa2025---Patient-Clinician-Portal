@@ -13,11 +13,12 @@ import {
     FaCommentMedical,
     FaCheck,
     FaEdit,
-    FaCheckCircle
+    FaCheckCircle,
+    FaBell
 } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
-import { updateApprovedResponses } from '../services/api'
+import { updateApprovedResponses, getUnreadNotificationsCount, getNotifications, markNotificationAsRead, Notification } from '../services/api'
 
 const PageTitle = styled.h1`
   margin-bottom: 2rem;
@@ -451,7 +452,7 @@ const Button = styled.button<{ variant?: 'primary' | 'secondary' | 'outline' }>`
   }
 `
 
-type TabType = 'patients' | 'tasks'
+type TabType = 'patients' | 'tasks' | 'queries'
 
 interface Task {
   id: string
@@ -798,9 +799,111 @@ const EditResponseTextarea = styled.textarea`
   }
 `
 
+// Add notification styled components
+const NotificationBell = styled.div<{ hasNotifications: boolean }>`
+  position: relative;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: ${({ hasNotifications }) => (hasNotifications ? '#3182ce' : '#718096')};
+  transition: color 0.2s;
+  
+  &:hover {
+    color: #3182ce;
+  }
+`
+
+const NotificationCounter = styled.div`
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #e53e3e;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+`
+
+const NotificationsContainer = styled.div`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  z-index: 100;
+  max-height: 400px;
+  overflow-y: auto;
+`
+
+const NotificationItem = styled.div`
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #f7fafc;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+`
+
+const NotificationHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background-color: #f7fafc;
+  border-bottom: 1px solid #e2e8f0;
+`
+
+const NotificationTitle = styled.div`
+  font-weight: 600;
+  color: #2d3748;
+`
+
+const NotificationClearAll = styled.button`
+  background: none;
+  border: none;
+  color: #3182ce;
+  font-size: 0.875rem;
+  cursor: pointer;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const NotificationText = styled.div`
+  font-size: 0.875rem;
+  color: #4a5568;
+`
+
+const NotificationTime = styled.div`
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.25rem;
+`
+
+const NotificationEmpty = styled.div`
+  padding: 2rem;
+  text-align: center;
+  color: #a0aec0;
+`
+
 const DoctorDashboard = () => {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('patients')
+  const [queryActiveTab, setQueryActiveTab] = useState<'all' | 'unapproved' | 'approved'>('all')
   const [patientQueries, setPatientQueries] = useState<PatientQuery[]>([])
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -837,28 +940,69 @@ const DoctorDashboard = () => {
   const [approvedQueries, setApprovedQueries] = useState<Set<string>>(new Set())
   const [successMessage, setSuccessMessage] = useState<string>('')
   
-  // Load patient queries from localStorage
+  // Add notification states
+  const [notificationCount, setNotificationCount] = useState<number>(0);
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  
+  // Move the loadNotificationsCount function right after the useEffect to fix the linter error
   useEffect(() => {
     const savedPrompts = localStorage.getItem('patientPromptHistory')
     
     if (savedPrompts) {
       try {
-        const parsedPrompts = JSON.parse(savedPrompts)
-        setPatientQueries(parsedPrompts)
+        const prompts = JSON.parse(savedPrompts)
+        console.log('Loaded prompts from localStorage:', prompts)
+        
+        // Map the prompts to PatientQuery objects
+        const queries: PatientQuery[] = prompts.map((prompt: any) => ({
+          id: prompt.id,
+          text: prompt.text || prompt.prompt,
+          timestamp: prompt.timestamp,
+          patientName: 'Patient',
+          aiResponse: prompt.aiResponse,
+          responseStatus: prompt.responseStatus,
+          isApproved: prompt.isApproved === true,
+          attachments: prompt.attachments
+        }));
+        
+        // Sort by newest first and filter according to the active tab
+        const sortedQueries = queries.sort((a, b) => b.timestamp - a.timestamp);
+        setPatientQueries(sortedQueries)
       } catch (error) {
-        console.error('Failed to parse patient queries:', error)
+        console.error('Failed to parse patient prompts:', error)
       }
     }
     
     // Set up a storage event listener to detect changes made by patients
     window.addEventListener('storage', handleStorageChange);
     
+    // Add notification event listener
+    const handleNotificationsUpdated = (event: CustomEvent) => {
+      if (event.detail?.role === 'doctor') {
+        loadNotificationsCount();
+      }
+    };
+    
+    window.addEventListener('notifications-updated', 
+      handleNotificationsUpdated as EventListener);
+    
+    // Initial load of notifications
+    loadNotificationsCount();
+    
     // Clean up on unmount
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('notifications-updated', 
+        handleNotificationsUpdated as EventListener);
     };
-  }, [])
-  
+  }, []);
+
+  // Function to load notification count
+  const loadNotificationsCount = () => {
+    const count = getUnreadNotificationsCount('doctor');
+    setNotificationCount(count);
+  };
+
   // Handle storage changes (when a patient submits a new query)
   const handleStorageChange = (event: StorageEvent) => {
     if (event.key === 'patientPromptHistory') {
@@ -875,7 +1019,25 @@ const DoctorDashboard = () => {
     }
   };
 
-  // Save updated queries to localStorage
+  // Add a new function to handle edit mode toggle
+  const handleEditResponse = (queryId: string) => {
+    setPatientQueries(prevQueries => 
+      prevQueries.map(query => {
+        if (query.id === queryId) {
+          // Initialize editedResponse with the original AI response if not already set
+          const editedResponse = query.editedResponse || query.aiResponse || '';
+          return { 
+            ...query, 
+            isEditing: !query.isEditing,
+            editedResponse 
+          };
+        }
+        return query;
+      })
+    );
+  };
+
+  // Save updated queries to localStorage - moving this up before other functions that use it
   const saveQueriesToLocalStorage = (): Promise<boolean> => {
     return new Promise((resolve) => {
       try {
@@ -941,24 +1103,6 @@ const DoctorDashboard = () => {
         resolve(false);
       }
     });
-  }
-  
-  // Add a new function to handle edit mode toggle
-  const handleEditResponse = (queryId: string) => {
-    setPatientQueries(prevQueries => 
-      prevQueries.map(query => {
-        if (query.id === queryId) {
-          // Initialize editedResponse with the original AI response if not already set
-          const editedResponse = query.editedResponse || query.aiResponse || '';
-          return { 
-            ...query, 
-            isEditing: !query.isEditing,
-            editedResponse 
-          };
-        }
-        return query;
-      })
-    );
   };
 
   // Add a function to handle changes to the edited response text
@@ -1078,9 +1222,109 @@ const DoctorDashboard = () => {
     return new Date(timestamp).toLocaleString()
   }
   
+  // Function to mark notifications as read
+  const markNotificationsAsRead = () => {
+    const notifications = getNotifications('doctor');
+    notifications.forEach(notification => {
+      if (!notification.isRead) {
+        markNotificationAsRead(notification.id, 'doctor');
+      }
+    });
+    loadNotificationsCount();
+  };
+  
+  // Function to handle notification click
+  const handleNotificationClick = (notification: Notification) => {
+    markNotificationAsRead(notification.id, 'doctor');
+    
+    // If it's a new query notification, switch to the patients tab
+    if (notification.type === 'new_query') {
+      setActiveTab('queries');
+      setQueryActiveTab('unapproved');
+      
+      // Find the query in the list and scroll to it
+      setTimeout(() => {
+        const queryElement = document.getElementById(`query-${notification.relatedId}`);
+        if (queryElement) {
+          queryElement.scrollIntoView({ behavior: 'smooth' });
+          queryElement.classList.add('highlight-query');
+          setTimeout(() => {
+            queryElement.classList.remove('highlight-query');
+          }, 2000);
+        }
+      }, 100);
+    }
+    
+    setShowNotifications(false);
+  };
+  
   return (
     <div>
-      <PageTitle>Doctor Dashboard</PageTitle>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '2rem' 
+      }}>
+        <PageTitle>Doctor Dashboard</PageTitle>
+        
+        <div style={{ position: 'relative' }}>
+          <NotificationBell 
+            hasNotifications={notificationCount > 0}
+            onClick={() => {
+              setShowNotifications(!showNotifications);
+              if (!showNotifications && notificationCount > 0) {
+                markNotificationsAsRead();
+              }
+            }}
+          >
+            <FaBell />
+            {notificationCount > 0 && (
+              <NotificationCounter>{notificationCount}</NotificationCounter>
+            )}
+          </NotificationBell>
+          
+          {showNotifications && (
+            <NotificationsContainer>
+              <NotificationHeader>
+                <NotificationTitle>Notifications</NotificationTitle>
+                <NotificationClearAll 
+                  onClick={() => markNotificationsAsRead()}
+                >
+                  Mark all as read
+                </NotificationClearAll>
+              </NotificationHeader>
+              
+              {(() => {
+                const notifications = getNotifications('doctor');
+                
+                if (notifications.length === 0) {
+                  return (
+                    <NotificationEmpty>
+                      No notifications
+                    </NotificationEmpty>
+                  );
+                }
+                
+                return notifications.map(notification => (
+                  <NotificationItem 
+                    key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
+                    style={{
+                      backgroundColor: notification.isRead ? 'transparent' : '#ebf8ff'
+                    }}
+                  >
+                    <NotificationText>{notification.text}</NotificationText>
+                    <NotificationTime>
+                      {new Date(notification.timestamp).toLocaleString()}
+                    </NotificationTime>
+                  </NotificationItem>
+                ));
+              })()}
+            </NotificationsContainer>
+          )}
+        </div>
+      </div>
       
       <StatsGrid>
         <StatCard>
