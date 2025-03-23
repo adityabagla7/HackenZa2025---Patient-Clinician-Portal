@@ -88,6 +88,7 @@ A comprehensive healthcare platform that connects clinicians and patients, enabl
 Use three terminals simultaneously to run the frontend and backend servers.
 
 ## Important Note
+We couldnot able to deploy because the PostgreSQL Database was stored locally.
 Please ensure you have the `.env` file with the necessary private keys and configurations. This file is not included in the GitHub repository for security reasons. Without these keys, the APIs will not function correctly. You can obtain the required keys from the project administrator.
 
 - Place the `.env` file in the `Backend` directory.
