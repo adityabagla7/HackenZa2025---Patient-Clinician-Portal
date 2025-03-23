@@ -16,6 +16,7 @@ import Prescriptions from './pages/Prescriptions'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
 import Profile from './pages/Profile'
+import MedicalDetails from './pages/MedicalDetails'
 
 // Components
 import Layout from './components/Layout'
@@ -69,6 +70,7 @@ function App() {
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/medical-details" element={<MedicalDetails />} />
         </Route>
         
         {/* Patient-specific routes */}
