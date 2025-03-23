@@ -1,4 +1,4 @@
-# Clinician-Patient Portal
+# Patient-Clinician Portal
 
 ## Overview
 A comprehensive healthcare platform that connects clinicians and patients, enabling secure medical consultations, record management, and healthcare monitoring.
