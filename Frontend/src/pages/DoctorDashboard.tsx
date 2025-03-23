@@ -654,6 +654,20 @@ const SuccessMessage = styled.div`
   font-weight: 500;
 `
 
+// Add an "Unverified" badge component
+const UnverifiedBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: #71809620;
+  color: #718096;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+`
+
 // Simple Markdown renderer component 
 const SimpleMarkdown = ({ content }: { content: string }) => {
   // Function to process markdown text
@@ -763,6 +777,27 @@ const ResponseText = styled.div`
   }
 `;
 
+// Add a styled component for the edit response textarea
+const EditResponseTextarea = styled.textarea`
+  width: 100%;
+  min-height: 150px;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  line-height: 1.5;
+  
+  &:focus {
+    outline: none;
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+  }
+`
+
 const DoctorDashboard = () => {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('patients')
@@ -856,6 +891,8 @@ const DoctorDashboard = () => {
             timestamp: query.timestamp,
             patientName: query.patientName,
             aiResponse: query.aiResponse,
+            editedResponse: query.editedResponse, // Save edited responses
+            isEditing: false, // Reset editing state 
             responseStatus: query.responseStatus,
             isApproved: isApproved, // Always a boolean
             attachments: query.attachments ? query.attachments.map(a => ({
@@ -867,6 +904,9 @@ const DoctorDashboard = () => {
           };
           
           console.log(`Preparing query ${query.id} for storage, isApproved: ${isApproved}, type: ${typeof isApproved}`);
+          if (query.editedResponse) {
+            console.log(`Query ${query.id} has edited response`);
+          }
           
           return result;
         });
@@ -888,6 +928,9 @@ const DoctorDashboard = () => {
         if (parsed) {
           for (const item of parsed) {
             console.log(`Stored query ${item.id}: isApproved=${item.isApproved}, type=${typeof item.isApproved}`);
+            if (item.editedResponse) {
+              console.log(`Stored query ${item.id} has edited response`);
+            }
           }
         }
         
@@ -900,16 +943,78 @@ const DoctorDashboard = () => {
     });
   }
   
-  // Handle approve AI response
+  // Add a new function to handle edit mode toggle
+  const handleEditResponse = (queryId: string) => {
+    setPatientQueries(prevQueries => 
+      prevQueries.map(query => {
+        if (query.id === queryId) {
+          // Initialize editedResponse with the original AI response if not already set
+          const editedResponse = query.editedResponse || query.aiResponse || '';
+          return { 
+            ...query, 
+            isEditing: !query.isEditing,
+            editedResponse 
+          };
+        }
+        return query;
+      })
+    );
+  };
+
+  // Add a function to handle changes to the edited response text
+  const handleEditResponseChange = (queryId: string, value: string) => {
+    setPatientQueries(prevQueries => 
+      prevQueries.map(query => 
+        query.id === queryId 
+          ? { ...query, editedResponse: value } 
+          : query
+      )
+    );
+  };
+
+  // Add a function to save the edited response
+  const handleSaveEditedResponse = async (queryId: string) => {
+    // Find the query that was edited
+    const editedQuery = patientQueries.find(q => q.id === queryId);
+    if (!editedQuery || !editedQuery.editedResponse) {
+      console.error('No edited response found');
+      return;
+    }
+    
+    // Update the query in our local state
+    const updatedQueries = patientQueries.map(query => 
+      query.id === queryId 
+        ? { 
+            ...query, 
+            aiResponse: query.editedResponse, // Replace the AI response with the edited version
+            isEditing: false // Exit edit mode
+          } 
+        : query
+    );
+    
+    setPatientQueries(updatedQueries);
+    
+    // Save to localStorage
+    await saveQueriesToLocalStorage();
+    
+    console.log(`Response for query ${queryId} has been edited successfully`);
+  };
+
+  // Update the handle approve function to use edited response if available
   const handleApproveResponse = async (queryId: string) => {
     try {
-      console.log(`Approving response for query ${queryId}`);
+      console.log(`Verifying response for query ${queryId}`);
       
       // Find the query to approve
       const queryToUpdate = patientQueries.find(q => q.id === queryId);
       if (!queryToUpdate) {
         console.error(`Query with ID ${queryId} not found`);
         return;
+      }
+      
+      // If currently in edit mode, save the edits first
+      if (queryToUpdate.isEditing && queryToUpdate.editedResponse) {
+        await handleSaveEditedResponse(queryId);
       }
       
       // Update the query in our local state
@@ -925,11 +1030,11 @@ const DoctorDashboard = () => {
       setApprovedQueries(prev => new Set(prev).add(queryId));
       
       // Save this update to localStorage and API
-      console.log(`Sending approval to API for query ${queryId}`);
+      console.log(`Sending verification status to API for query ${queryId}`);
       const apiResult = await updateApprovedResponses(queryId, true);
       
       if (!apiResult) {
-        console.error('API service failed to update approval status');
+        console.error('API service failed to update verification status');
       }
       
       // Save to localStorage - make sure to await this
@@ -940,17 +1045,17 @@ const DoctorDashboard = () => {
         console.error('Failed to save to localStorage');
       }
       
-      console.log(`Response for query ${queryId} has been approved successfully`);
+      console.log(`Response for query ${queryId} has been verified successfully`);
       
       // Show success message
-      setSuccessMessage(`Response approved! Patients can now see it in the "Responses to Queries" tab`);
+      setSuccessMessage(`Response verified! The patient will now see this as "Doctor Verified"`);
       
       // Hide the success message after 5 seconds
       setTimeout(() => {
         setSuccessMessage('');
       }, 5000);
     } catch (error) {
-      console.error('Error approving response:', error);
+      console.error('Error verifying response:', error);
     }
   };
   
@@ -1048,28 +1153,75 @@ const DoctorDashboard = () => {
                         </AttachmentsList>
                       )}
                       
-                      {/* Display Gemini's AI Response */}
-                      {query.responseStatus && (
+                      {/* Display Gemini's AI Response - Loading state */}
+                      {query.responseStatus === 'loading' && (
                         <GeminiResponseContainer>
                           <GeminiResponseTitle>
                             <FaCommentMedical />
                             AI Analysis
-                            {query.responseStatus && (
-                              <ResponseStatusBadge status={query.responseStatus}>
-                                {query.responseStatus === 'loading' ? 'Analyzing...' : 
-                                 query.responseStatus === 'success' ? 'Complete' : 'Failed'}
-                              </ResponseStatusBadge>
-                            )}
-                            {query.isApproved && (
-                              <ResponseStatusBadge status="success">Doctor Approved</ResponseStatusBadge>
+                            <ResponseStatusBadge status="loading">
+                              Analyzing...
+                            </ResponseStatusBadge>
+                          </GeminiResponseTitle>
+                          <GeminiResponseText>Analyzing patient query...</GeminiResponseText>
+                        </GeminiResponseContainer>
+                      )}
+                      
+                      {/* Display Gemini's AI Response - Error state */}
+                      {query.responseStatus === 'error' && (
+                        <GeminiResponseContainer>
+                          <GeminiResponseTitle>
+                            <FaCommentMedical />
+                            AI Analysis
+                            <ResponseStatusBadge status="error">
+                              Failed
+                            </ResponseStatusBadge>
+                          </GeminiResponseTitle>
+                          <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>
+                        </GeminiResponseContainer>
+                      )}
+                      
+                      {/* Display Gemini's AI Response - Success state */}
+                      {query.responseStatus === 'success' && query.aiResponse && (
+                        <GeminiResponseContainer>
+                          <GeminiResponseTitle>
+                            <FaCommentMedical />
+                            AI Analysis
+                            <ResponseStatusBadge status="success">
+                              Complete
+                            </ResponseStatusBadge>
+                            {query.isApproved ? (
+                              <ResponseStatusBadge status="success">Doctor Verified</ResponseStatusBadge>
+                            ) : (
+                              <UnverifiedBadge>
+                                <FaCommentMedical />
+                                Needs Verification
+                              </UnverifiedBadge>
                             )}
                           </GeminiResponseTitle>
-                          {/* Response Status */}
-                          {query.responseStatus === 'loading' && <GeminiResponseText>Analyzing patient query...</GeminiResponseText>}
-                          {query.responseStatus === 'error' && <GeminiResponseText>Error analyzing query. Please try again later.</GeminiResponseText>}
-                          {query.responseStatus === 'success' && query.aiResponse && (
+                          
+                          {query.isEditing ? (
+                            // Display edit mode
+                            <>
+                              <EditResponseTextarea
+                                value={query.editedResponse || ''}
+                                onChange={(e) => handleEditResponseChange(query.id, e.target.value)}
+                                placeholder="Edit the AI response here..."
+                              />
+                              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                <ActionButton variant="primary" onClick={() => handleSaveEditedResponse(query.id)}>
+                                  <FaCheck />
+                                  Save Edits
+                                </ActionButton>
+                                <ActionButton variant="outline" onClick={() => handleEditResponse(query.id)}>
+                                  Cancel
+                                </ActionButton>
+                              </div>
+                            </>
+                          ) : (
+                            // Display normal view
                             <ResponseText>
-                              <SimpleMarkdown content={query.aiResponse || ''} />
+                              <SimpleMarkdown content={query.editedResponse || query.aiResponse || ''} />
                             </ResponseText>
                           )}
                           
@@ -1077,7 +1229,7 @@ const DoctorDashboard = () => {
                           {approvedQueries.has(query.id) && (
                             <SuccessMessage>
                               <FaCheckCircle />
-                              Response approved! Patients can now see it in the "Responses to Queries" tab.
+                              Response verified! Patients can now see this as verified.
                             </SuccessMessage>
                           )}
                         </GeminiResponseContainer>
@@ -1085,15 +1237,21 @@ const DoctorDashboard = () => {
                       
                       <AppointmentActions>
                         {query.responseStatus === 'success' && !query.isApproved && (
-                          <ActionButton variant="primary" onClick={() => handleApproveResponse(query.id)}>
-                            <FaCheck />
-                            Approve Response
-                          </ActionButton>
+                          <>
+                            <ActionButton variant="primary" onClick={() => handleApproveResponse(query.id)}>
+                              <FaCheck />
+                              Verify Response
+                            </ActionButton>
+                            <ActionButton variant="outline" onClick={() => handleEditResponse(query.id)}>
+                              <FaEdit />
+                              Edit Response
+                            </ActionButton>
+                          </>
                         )}
                         {query.isApproved && (
                           <ActionButton variant="secondary" disabled>
                             <FaCheck />
-                            Approved
+                            Verified
                           </ActionButton>
                         )}
                         <ActionButton variant="primary">

@@ -689,6 +689,20 @@ const NotificationBadge = styled.span`
   margin-left: 0.5rem;
 `
 
+// Add an "Unverified" badge component
+const UnverifiedBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: #71809620;
+  color: #718096;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+`
+
 // Simple Markdown renderer component
 const SimpleMarkdown = ({ content }: { content: string }) => {
   // Function to process markdown text
@@ -744,6 +758,40 @@ const SimpleMarkdown = ({ content }: { content: string }) => {
     />
   );
 };
+
+// Fix ResponseStatusBadge type by adding missing type
+const ResponseStatusBadge = styled.span<{ status: 'loading' | 'success' | 'error' }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  background-color: ${({ status }) => {
+    switch (status) {
+      case 'success':
+        return '#38a16920';
+      case 'loading':
+        return '#3182ce20';
+      case 'error':
+        return '#e53e3e20';
+      default:
+        return '#a0aec020';
+    }
+  }};
+  color: ${({ status }) => {
+    switch (status) {
+      case 'success':
+        return '#38a169';
+      case 'loading':
+        return '#3182ce';
+      case 'error':
+        return '#e53e3e';
+      default:
+        return '#a0aec0';
+    }
+  }};
+`
 
 const PatientDashboard = () => {
   const { user } = useAuth()
@@ -981,12 +1029,19 @@ const PatientDashboard = () => {
       // Call the Gemini API for an AI response
       const aiResponse = await getAIResponse(prompt)
       
-      // Update the history item with the AI response
+      // Update the history item with the AI response - set responseStatus to success immediately
       const updatedHistoryWithResponse = updatedHistory.map(item => 
         item.id === newPromptId 
-          ? { ...item, aiResponse, responseStatus: 'success' as const, isApproved: false } 
+          ? { 
+              ...item, 
+              aiResponse, 
+              responseStatus: 'success' as const, 
+              isApproved: false  // Initially unverified - doctor needs to approve
+            } 
           : item
       )
+      
+      console.log(`AI response received and showing to patient immediately (unverified):`, aiResponse.substring(0, 100) + '...');
       
       setPromptHistory(updatedHistoryWithResponse)
       
@@ -1016,7 +1071,7 @@ const PatientDashboard = () => {
   
   // Helper function to save to localStorage
   const saveToSessionStorage = (history: PromptHistoryItem[]) => {
-    // First get existing data to preserve approved status
+    // First get existing data to preserve approved status and edited responses
     const existingData = localStorage.getItem('patientPromptHistory');
     let existingItems: any[] = [];
     
@@ -1037,12 +1092,15 @@ const PatientDashboard = () => {
     
     // Create a simplified version suitable for storage
     const historyForStorage = history.map(item => {
-      // Check if this item exists and is already approved
+      // Check if this item exists and has properties we want to preserve
       const existingItem = existingMap.get(item.id);
       const wasApproved = existingItem && existingItem.isApproved === true;
       
       // Use the existing approval status if it was true, otherwise use the current one
       const isApproved = wasApproved || item.isApproved === true;
+      
+      // Preserve the AI response - doctor might have edited it
+      const aiResponse = item.aiResponse || (existingItem ? existingItem.aiResponse : null);
       
       console.log(`Item ${item.id}: wasApproved=${wasApproved}, currentApproval=${item.isApproved}, finalApproval=${isApproved}`);
       
@@ -1050,7 +1108,7 @@ const PatientDashboard = () => {
         id: item.id,
         text: item.text,
         timestamp: item.timestamp,
-        aiResponse: item.aiResponse,
+        aiResponse: aiResponse,
         responseStatus: item.responseStatus,
         isApproved: isApproved, // Always boolean
         attachments: item.attachments ? item.attachments.map(a => ({
@@ -1133,13 +1191,13 @@ const PatientDashboard = () => {
           active={activeTab === 'ask'} 
           onClick={() => handleTabClick('ask')}
         >
-          Ask Health Assistant
+          All Responses
         </Tab>
         <Tab 
           active={activeTab === 'responses'} 
           onClick={() => handleTabClick('responses')}
         >
-          Responses to Queries
+          Doctor Verified Only
           {unseenResponseCount > 0 && (
             <NotificationBadge>{unseenResponseCount}</NotificationBadge>
           )}
@@ -1151,8 +1209,7 @@ const PatientDashboard = () => {
         <PromptSection>
           <PromptTitle>Health Assistant</PromptTitle>
           <PromptDescription>
-            Enter your health-related questions, symptoms, lab report details, or medicine inquiries below. 
-            You can also attach relevant images, videos, or documents.
+            Ask health-related questions and receive AI-generated responses immediately. Doctors will verify responses for medical accuracy.
           </PromptDescription>
           <PromptForm onSubmit={handleSubmit}>
             <PromptTextarea 
@@ -1218,12 +1275,12 @@ const PatientDashboard = () => {
             </ButtonContainer>
           </PromptForm>
           
-          {/* Display Submitted Questions */}
+          {/* Display Submitted Questions with their AI responses */}
           {promptHistory.length > 0 && (
             <PromptHistory>
               <PromptHistoryTitle>Submitted Questions</PromptHistoryTitle>
               <div style={{ color: '#718096', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                Questions are first analyzed by AI and then reviewed by a doctor. Check the "Responses to Queries" tab for verified responses.
+                AI responses are shown immediately but require doctor verification for medical accuracy.
               </div>
               {promptHistory.map((item) => (
                 <PromptHistoryItem key={item.id}>
@@ -1257,7 +1314,25 @@ const PatientDashboard = () => {
                   <AIResponseContainer>
                     <AIResponseHeader>
                       <FaCommentMedical style={{ marginRight: '0.5rem' }} />
-                      Status
+                      AI Response
+                      {item.responseStatus === 'loading' && (
+                        <ResponseStatusBadge status="loading">Analyzing...</ResponseStatusBadge>
+                      )}
+                      {item.responseStatus === 'error' && (
+                        <ResponseStatusBadge status="error">Failed</ResponseStatusBadge>
+                      )}
+                      {item.responseStatus === 'success' && !item.isApproved && (
+                        <UnverifiedBadge>
+                          <FaCommentMedical />
+                          Unverified
+                        </UnverifiedBadge>
+                      )}
+                      {item.responseStatus === 'success' && item.isApproved === true && (
+                        <VerifiedBadge>
+                          <FaCheckCircle />
+                          Doctor Verified
+                        </VerifiedBadge>
+                      )}
                     </AIResponseHeader>
                     
                     {item.responseStatus === 'loading' && (
@@ -1268,12 +1343,14 @@ const PatientDashboard = () => {
                       <div>There was an error processing your query. Please try again.</div>
                     )}
                     
-                    {item.responseStatus === 'success' && !item.isApproved && (
-                      <LoadingText>Your question is being reviewed by a doctor. Check the "Responses to Queries" tab for verified responses.</LoadingText>
-                    )}
-                    
-                    {item.responseStatus === 'success' && item.isApproved === true && (
-                      <LoadingText>This question has been verified by a doctor. Please check the "Responses to Queries" tab to view it.</LoadingText>
+                    {item.responseStatus === 'success' && item.aiResponse && (
+                      <AIResponseContent>
+                        <SimpleMarkdown content={item.aiResponse} />
+                        {!item.aiResponse.includes('*') && !item.aiResponse.includes('#') && 
+                          !item.aiResponse.includes('`') && !item.aiResponse.includes('-') && (
+                          <div>{item.aiResponse}</div>
+                        )}
+                      </AIResponseContent>
                     )}
                   </AIResponseContainer>
                 </PromptHistoryItem>
@@ -1287,6 +1364,9 @@ const PatientDashboard = () => {
       {activeTab === 'responses' && (
         <Section>
           <SubTitle>Doctor Verified Responses</SubTitle>
+          <div style={{ color: '#718096', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            These responses have been reviewed and verified by a doctor for medical accuracy.
+          </div>
           <div>
             {(() => {
               console.log('All prompts before filtering for approved:', promptHistory);

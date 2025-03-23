@@ -41,7 +41,7 @@ export const getAIResponse = async (prompt: string): Promise<string> => {
 
 // Function to share doctor-approved responses with patients
 export const updateApprovedResponses = (queryId: string, isApproved: boolean): Promise<boolean> => {
-  console.log(`API: Updating approval status for query ${queryId} to ${isApproved}, type: ${typeof isApproved}`);
+  console.log(`API: Updating verification status for query ${queryId} to ${isApproved ? 'VERIFIED' : 'UNVERIFIED'}, type: ${typeof isApproved}`);
   
   return new Promise((resolve) => {
     try {
@@ -57,12 +57,19 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
           console.log(`API: Prompt ${prompt.id}: isApproved=${prompt.isApproved}, type=${typeof prompt.isApproved}`);
         });
         
+        // Find the query that needs updating to preserve any edited content
+        const queryToUpdate = prompts.find((p: any) => p.id === queryId);
+        
         // Update the specific query's approval status
         const updatedPrompts = prompts.map((prompt: any) => {
           if (prompt.id === queryId) {
-            console.log(`API: Updating query ${queryId} approval status from ${prompt.isApproved} to ${isApproved}`);
-            // Ensure isApproved is boolean
-            return { ...prompt, isApproved: isApproved === true };
+            console.log(`API: Updating query ${queryId} verification status from ${prompt.isApproved ? 'VERIFIED' : 'UNVERIFIED'} to ${isApproved ? 'VERIFIED' : 'UNVERIFIED'}`);
+            // Ensure isApproved is boolean and preserve the response content
+            return { 
+              ...prompt, 
+              isApproved: isApproved === true,
+              // Keep any other properties like editedResponse
+            };
           }
           // Ensure all other items maintain proper boolean isApproved
           return { ...prompt, isApproved: prompt.isApproved === true };
@@ -70,7 +77,7 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
         
         const updatedPrompt = updatedPrompts.find((p: any) => p.id === queryId);
         console.log(`API: Updated prompt ${queryId}:`, updatedPrompt);
-        console.log(`API: isApproved type: ${typeof updatedPrompt?.isApproved}`);
+        console.log(`API: Verification status type: ${typeof updatedPrompt?.isApproved}`);
         
         // Save back to localStorage - we need to use a temporary variable first
         // to ensure the storage event is fired for different windows/tabs
@@ -85,10 +92,10 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
           const parsedData = JSON.parse(savedData);
           const savedQuery = parsedData.find((p: any) => p.id === queryId);
           console.log(`API: Verified saved query ${queryId}:`, savedQuery);
-          console.log(`API: Saved isApproved type: ${typeof savedQuery?.isApproved}`);
+          console.log(`API: Saved verification status: ${savedQuery?.isApproved ? 'VERIFIED' : 'UNVERIFIED'}, type: ${typeof savedQuery?.isApproved}`);
         }
         
-        console.log('API: Successfully updated localStorage');
+        console.log('API: Successfully updated localStorage with new verification status');
         
         // In a real application, this would be sent to the backend via an API call
         resolve(true);
@@ -97,7 +104,7 @@ export const updateApprovedResponses = (queryId: string, isApproved: boolean): P
       
       resolve(false);
     } catch (error) {
-      console.error('Error updating approval status:', error);
+      console.error('Error updating verification status:', error);
       resolve(false);
     }
   });
