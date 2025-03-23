@@ -7,7 +7,8 @@ interface User {
   email: string
   role: 'admin' | 'doctor' | 'clinician' | 'patient'
 }
-
+// Define the shape of the context
+// The context will have the following properties:
 interface AuthContextType {
   user: User | null
   loading: boolean
