@@ -8,15 +8,15 @@ import Dashboard from './pages/Dashboard'
 import DoctorDashboard from './pages/DoctorDashboard'
 import Doctors from './pages/Doctors'
 import Login from './pages/Login'
+import MedicalDetails from './pages/MedicalDetails'
 import MedicalRecords from './pages/MedicalRecords'
 import NotFound from './pages/NotFound'
 import PatientDashboard from './pages/PatientDashboard'
 import Patients from './pages/Patients'
 import Prescriptions from './pages/Prescriptions'
+import Profile from './pages/Profile'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
-import Profile from './pages/Profile'
-import MedicalDetails from './pages/MedicalDetails'
 
 // Components
 import Layout from './components/Layout'
@@ -56,6 +56,7 @@ function App() {
         {/* Patient-only routes */}
         <Route element={<ProtectedRoute allowedRoles={['patient']} />}>
           <Route path="/patient-dashboard" element={<PatientDashboard />} />
+          <Route path="/medical-details" element={<MedicalDetails />} />
         </Route>
         
         {/* Doctor-only routes */}
@@ -70,7 +71,6 @@ function App() {
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/medical-details" element={<MedicalDetails />} />
         </Route>
         
         {/* Patient-specific routes */}

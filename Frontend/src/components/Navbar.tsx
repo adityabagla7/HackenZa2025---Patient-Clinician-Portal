@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FaCog, FaSignOutAlt, FaUser, FaClipboardList } from 'react-icons/fa'
+import { FaClipboardList, FaCog, FaSignOutAlt, FaUser } from 'react-icons/fa'
 import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
@@ -192,10 +192,12 @@ const Navbar = () => {
               <FaUser />
               Profile
             </DropdownItem>
-            <DropdownItem onClick={handleMedicalDetails}>
-              <FaClipboardList />
-              Fill Details
-            </DropdownItem>
+            {user?.role === 'patient' && (
+              <DropdownItem onClick={handleMedicalDetails}>
+                <FaClipboardList />
+                Fill Details
+              </DropdownItem>
+            )}
             <DropdownItem onClick={handleSettings}>
               <FaCog />
               Settings
