@@ -562,6 +562,7 @@ interface PromptHistoryItem {
   aiResponse?: string;
   responseStatus?: 'loading' | 'success' | 'error';
   isApproved?: boolean;
+  isUrgent?: boolean;
 }
 
 // Interface for attachment files
@@ -817,6 +818,56 @@ const VoiceButton = styled.button`
   }
 `;
 
+const UrgencyToggle = styled.div`
+  display: flex;
+  align-items: center;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+`;
+
+const UrgencyLabel = styled.label`
+  font-size: 0.875rem;
+  color: #4a5568;
+  margin-right: 0.5rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+`;
+
+const UrgencySwitch = styled.div<{ isUrgent: boolean }>`
+  width: 3rem;
+  height: 1.5rem;
+  background-color: ${props => props.isUrgent ? '#e53e3e' : '#cbd5e0'};
+  border-radius: 1rem;
+  position: relative;
+  transition: all 0.2s;
+  cursor: pointer;
+  
+  &:after {
+    content: '';
+    position: absolute;
+    width: 1.25rem;
+    height: 1.25rem;
+    background-color: white;
+    border-radius: 50%;
+    top: 0.125rem;
+    left: ${props => props.isUrgent ? 'calc(100% - 1.375rem)' : '0.125rem'};
+    transition: all 0.2s;
+  }
+`;
+
+const UrgencyBadge = styled.span`
+  background-color: #e53e3e;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  margin-left: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+`;
+
 const RecordingIndicator = styled.div`
   display: flex;
   align-items: center;
@@ -981,6 +1032,9 @@ const PatientDashboard = () => {
   
   // Add state for notifications panel
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  
+  // Add state for isUrgent
+  const [isUrgent, setIsUrgent] = useState(false);
   
   // Load prompt history from localStorage on component mount
   useEffect(() => {
@@ -1191,12 +1245,13 @@ const PatientDashboard = () => {
         type: a.type
       })),
       responseStatus: 'loading',
-      isApproved: false
+      isApproved: false,
+      isUrgent: isUrgent
     }
     
     // Create a notification for the doctor
     const patientName = user?.name || 'A patient';
-    const notificationText = `${patientName} submitted a new query: "${prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt}"`;
+    const notificationText = `${patientName} submitted a ${isUrgent ? 'URGENT ' : ''}query: "${prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt}"`;
     
     saveNotification({
       id: `notification-${Date.now()}`,
@@ -1204,7 +1259,8 @@ const PatientDashboard = () => {
       timestamp: Date.now(),
       relatedId: newPromptId,
       text: notificationText,
-      isRead: false
+      isRead: false,
+      isUrgent: isUrgent
     }, 'doctor');
     
     // Update history state immediately with 'loading' status
@@ -1248,9 +1304,10 @@ const PatientDashboard = () => {
       // Save to localStorage
       saveToSessionStorage(updatedHistoryWithError)
     } finally {
-      // Clear the input and attachments regardless of success/failure
+      // Clear the input, attachments, and isUrgent flag regardless of success/failure
       setPrompt('')
       setAttachments([])
+      setIsUrgent(false)
       setIsSubmitting(false)
     }
   }
@@ -1281,7 +1338,8 @@ const PatientDashboard = () => {
       // Store with explicit boolean conversion
       existingMap.set(item.id, {
         ...item,
-        isApproved: item.isApproved === true
+        isApproved: item.isApproved === true,
+        isUrgent: item.isUrgent === true
       });
     });
     
@@ -1295,7 +1353,10 @@ const PatientDashboard = () => {
       const wasApproved = existingItem && existingItem.isApproved === true;
       const isApproved = wasApproved || (item.isApproved === true);
       
-      console.log(`Item ${item.id}: wasApproved=${wasApproved}, currentApproval=${item.isApproved}, finalApproval=${isApproved}`);
+      // Preserve urgent status
+      const isUrgent = item.isUrgent === true;
+      
+      console.log(`Item ${item.id}: wasApproved=${wasApproved}, currentApproval=${item.isApproved}, finalApproval=${isApproved}, isUrgent=${isUrgent}`);
       
       // For edited responses, preserve what the doctor edited
       const aiResponse = existingItem?.editedResponse || 
@@ -1309,6 +1370,7 @@ const PatientDashboard = () => {
         aiResponse: aiResponse, 
         responseStatus: item.responseStatus || 'success',
         isApproved: isApproved, // Always boolean
+        isUrgent: isUrgent, // Always boolean
         attachments: item.attachments ? item.attachments.map(a => ({
           id: a.id,
           fileName: a.file.name,
@@ -1662,6 +1724,14 @@ const PatientDashboard = () => {
               <ErrorMessage>{fileError}</ErrorMessage>
             )}
             
+            <UrgencyToggle>
+              <UrgencyLabel onClick={() => setIsUrgent(!isUrgent)}>
+                <FaBell style={{ color: isUrgent ? '#e53e3e' : '#718096', marginRight: '0.5rem' }} />
+                Mark as urgent
+              </UrgencyLabel>
+              <UrgencySwitch isUrgent={isUrgent} onClick={() => setIsUrgent(!isUrgent)} />
+            </UrgencyToggle>
+            
             <ButtonContainer>
               <FormActions>
                 <FileUploadButton>
@@ -1715,11 +1785,36 @@ const PatientDashboard = () => {
               <div style={{ color: '#718096', fontSize: '0.875rem', marginBottom: '1rem' }}>
                 AI responses are shown immediately but require doctor verification for medical accuracy.
               </div>
-              {promptHistory.map((item) => (
+              {promptHistory
+                // Sort unverified queries by urgency first, verified queries by timestamp
+                .sort((a, b) => {
+                  // First separate verified from unverified
+                  if (a.isApproved && !b.isApproved) return 1; // Verified after unverified
+                  if (!a.isApproved && b.isApproved) return -1; // Unverified before verified
+                  
+                  // If both are verified, sort by timestamp (newer first)
+                  if (a.isApproved && b.isApproved) {
+                    return b.timestamp - a.timestamp;
+                  }
+                  
+                  // If both are unverified, first sort by urgency
+                  if (a.isUrgent && !b.isUrgent) return -1;
+                  if (!a.isUrgent && b.isUrgent) return 1;
+                  
+                  // If urgency is the same or both not urgent, sort by timestamp (newer first)
+                  return b.timestamp - a.timestamp;
+                })
+                .map((item) => (
                 <PromptHistoryItem key={item.id}>
                   <PromptHistoryDate>
                     <FaClock style={{ marginRight: '0.25rem' }} />
                     {formatDate(item.timestamp)}
+                    {item.isUrgent && (
+                      <UrgencyBadge>
+                        <FaBell style={{ marginRight: '0.25rem' }} />
+                        URGENT
+                      </UrgencyBadge>
+                    )}
                   </PromptHistoryDate>
                   <PromptHistoryText>{item.text}</PromptHistoryText>
                   

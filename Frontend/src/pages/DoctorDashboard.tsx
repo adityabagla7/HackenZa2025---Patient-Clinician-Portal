@@ -479,6 +479,7 @@ interface PatientQuery {
     fileType: string;
     type: 'image' | 'video' | 'file';
   }[];
+  isUrgent?: boolean;
 }
 
 const QueryCard = styled(Card)`
@@ -888,6 +889,19 @@ const NotificationText = styled.div`
   color: #4a5568;
 `
 
+const NotificationIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.75rem;
+  color: #3182ce;
+  font-size: 1.25rem;
+`
+
+const NotificationContent = styled.div`
+  flex: 1;
+`
+
 const NotificationTime = styled.div`
   font-size: 0.75rem;
   color: #718096;
@@ -899,6 +913,50 @@ const NotificationEmpty = styled.div`
   text-align: center;
   color: #a0aec0;
 `
+
+const ResponseStatus = styled.span<{ approved: boolean }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  background-color: ${({ approved }) => (approved ? '#38a16920' : '#3182ce20')};
+  color: ${({ approved }) => (approved ? '#38a169' : '#3182ce')};
+`
+
+const UrgencyBadge = styled.span`
+  background-color: #e53e3e;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  margin-left: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+`
+
+// Add a helper function to sort queries by urgency for unverified and by timestamp for verified
+const sortQueriesByUrgency = (queries: PatientQuery[]): PatientQuery[] => {
+  return [...queries].sort((a, b) => {
+    // First separate verified from unverified
+    if (a.isApproved && !b.isApproved) return 1; // Verified after unverified
+    if (!a.isApproved && b.isApproved) return -1; // Unverified before verified
+    
+    // If both are verified, sort by timestamp (newer first)
+    if (a.isApproved && b.isApproved) {
+      return b.timestamp - a.timestamp;
+    }
+    
+    // If both are unverified, first sort by urgency
+    if (a.isUrgent && !b.isUrgent) return -1;
+    if (!a.isUrgent && b.isUrgent) return 1;
+    
+    // If urgency is the same or both not urgent, sort by timestamp (newer first)
+    return b.timestamp - a.timestamp;
+  });
+};
 
 const DoctorDashboard = () => {
   const { user } = useAuth()
@@ -962,11 +1020,12 @@ const DoctorDashboard = () => {
           aiResponse: prompt.aiResponse,
           responseStatus: prompt.responseStatus,
           isApproved: prompt.isApproved === true,
+          isUrgent: prompt.isUrgent === true,
           attachments: prompt.attachments
         }));
         
-        // Sort by newest first and filter according to the active tab
-        const sortedQueries = queries.sort((a, b) => b.timestamp - a.timestamp);
+        // Sort by urgency using the helper function
+        const sortedQueries = sortQueriesByUrgency(queries);
         setPatientQueries(sortedQueries)
       } catch (error) {
         console.error('Failed to parse patient prompts:', error)
@@ -1011,7 +1070,24 @@ const DoctorDashboard = () => {
       if (savedPrompts) {
         try {
           const parsedPrompts = JSON.parse(savedPrompts)
-          setPatientQueries(parsedPrompts)
+          
+          // Map the prompts to PatientQuery objects with proper urgency flag
+          const queries: PatientQuery[] = parsedPrompts.map((prompt: any) => ({
+            id: prompt.id,
+            text: prompt.text || prompt.prompt,
+            timestamp: prompt.timestamp,
+            patientName: 'Patient',
+            aiResponse: prompt.aiResponse,
+            responseStatus: prompt.responseStatus,
+            isApproved: prompt.isApproved === true,
+            isUrgent: prompt.isUrgent === true,
+            attachments: prompt.attachments
+          }));
+          
+          // Sort by urgency using the helper function
+          const sortedQueries = sortQueriesByUrgency(queries);
+          
+          setPatientQueries(sortedQueries)
         } catch (error) {
           console.error('Failed to parse patient queries:', error)
         }
@@ -1021,8 +1097,8 @@ const DoctorDashboard = () => {
 
   // Add a new function to handle edit mode toggle
   const handleEditResponse = (queryId: string) => {
-    setPatientQueries(prevQueries => 
-      prevQueries.map(query => {
+    setPatientQueries(prevQueries => {
+      const updatedQueries = prevQueries.map(query => {
         if (query.id === queryId) {
           // Initialize editedResponse with the original AI response if not already set
           const editedResponse = query.editedResponse || query.aiResponse || '';
@@ -1033,8 +1109,54 @@ const DoctorDashboard = () => {
           };
         }
         return query;
-      })
+      });
+      // Sort by urgency
+      return sortQueriesByUrgency(updatedQueries);
+    });
+  };
+
+  // Add a function to handle changes to the edited response text
+  const handleEditResponseChange = (queryId: string, value: string) => {
+    setPatientQueries(prevQueries => {
+      const updatedQueries = prevQueries.map(query => 
+        query.id === queryId 
+          ? { ...query, editedResponse: value } 
+          : query
+      );
+      // Sort by urgency
+      return sortQueriesByUrgency(updatedQueries);
+    });
+  };
+
+  // Add a function to save the edited response
+  const handleSaveEditedResponse = async (queryId: string) => {
+    // Find the query that was edited
+    const editedQuery = patientQueries.find(q => q.id === queryId);
+    if (!editedQuery || !editedQuery.editedResponse) {
+      console.error('No edited response found');
+      return;
+    }
+    
+    // Update the query in our local state
+    const updatedQueries = patientQueries.map(query => 
+      query.id === queryId 
+        ? { 
+            ...query, 
+            aiResponse: query.editedResponse, // Replace the AI response with the edited version
+            isEditing: false // Exit edit mode
+          } 
+        : query
     );
+    
+    // Sort by urgency
+    const sortedQueries = sortQueriesByUrgency(updatedQueries);
+    
+    setPatientQueries(sortedQueries);
+    
+    // Save to localStorage
+    await saveQueriesToLocalStorage();
+    
+    console.log(`Response for query ${queryId} has been edited successfully`);
   };
 
   // Save updated queries to localStorage - moving this up before other functions that use it
@@ -1045,6 +1167,7 @@ const DoctorDashboard = () => {
         const simplifiedQueries = patientQueries.map(query => {
           // Explicitly ensure isApproved is a boolean true or false, not undefined or string
           const isApproved = query.isApproved === true;
+          const isUrgent = query.isUrgent === true;
           
           // Make a copy to avoid reference issues
           const result = {
@@ -1057,6 +1180,7 @@ const DoctorDashboard = () => {
             isEditing: false, // Reset editing state 
             responseStatus: query.responseStatus,
             isApproved: isApproved, // Always a boolean
+            isUrgent: isUrgent, // Always a boolean
             attachments: query.attachments ? query.attachments.map(a => ({
               id: a.id,
               fileName: a.fileName,
@@ -1065,7 +1189,7 @@ const DoctorDashboard = () => {
             })) : undefined
           };
           
-          console.log(`Preparing query ${query.id} for storage, isApproved: ${isApproved}, type: ${typeof isApproved}`);
+          console.log(`Preparing query ${query.id} for storage, isApproved: ${isApproved}, isUrgent: ${isUrgent}`);
           if (query.editedResponse) {
             console.log(`Query ${query.id} has edited response`);
           }
@@ -1105,45 +1229,6 @@ const DoctorDashboard = () => {
     });
   };
 
-  // Add a function to handle changes to the edited response text
-  const handleEditResponseChange = (queryId: string, value: string) => {
-    setPatientQueries(prevQueries => 
-      prevQueries.map(query => 
-        query.id === queryId 
-          ? { ...query, editedResponse: value } 
-          : query
-      )
-    );
-  };
-
-  // Add a function to save the edited response
-  const handleSaveEditedResponse = async (queryId: string) => {
-    // Find the query that was edited
-    const editedQuery = patientQueries.find(q => q.id === queryId);
-    if (!editedQuery || !editedQuery.editedResponse) {
-      console.error('No edited response found');
-      return;
-    }
-    
-    // Update the query in our local state
-    const updatedQueries = patientQueries.map(query => 
-      query.id === queryId 
-        ? { 
-            ...query, 
-            aiResponse: query.editedResponse, // Replace the AI response with the edited version
-            isEditing: false // Exit edit mode
-          } 
-        : query
-    );
-    
-    setPatientQueries(updatedQueries);
-    
-    // Save to localStorage
-    await saveQueriesToLocalStorage();
-    
-    console.log(`Response for query ${queryId} has been edited successfully`);
-  };
-
   // Update the handle approve function to use edited response if available
   const handleApproveResponse = async (queryId: string) => {
     try {
@@ -1170,10 +1255,13 @@ const DoctorDashboard = () => {
           : query
       );
       
-      console.log(`Local state update for query ${queryId}:`, updatedQueries.find(q => q.id === queryId));
+      // Sort by urgency
+      const sortedQueries = sortQueriesByUrgency(updatedQueries);
+      
+      console.log(`Local state update for query ${queryId}:`, sortedQueries.find(q => q.id === queryId));
       
       // Update state first to give immediate feedback
-      setPatientQueries(updatedQueries);
+      setPatientQueries(sortedQueries);
       
       // Add this query to our approvedQueries state for visual feedback
       setApprovedQueries(prev => new Set(prev).add(queryId));
@@ -1314,10 +1402,23 @@ const DoctorDashboard = () => {
                       backgroundColor: notification.isRead ? 'transparent' : '#ebf8ff'
                     }}
                   >
-                    <NotificationText>{notification.text}</NotificationText>
-                    <NotificationTime>
-                      {new Date(notification.timestamp).toLocaleString()}
-                    </NotificationTime>
+                    <NotificationIcon>
+                      {notification.type === 'new_query' ? <FaCommentMedical /> : <FaReply />}
+                    </NotificationIcon>
+                    <NotificationContent>
+                      <NotificationText>
+                        {notification.text}
+                        {notification.isUrgent && (
+                          <UrgencyBadge>
+                            <FaBell style={{ marginRight: '0.25rem' }} />
+                            URGENT
+                          </UrgencyBadge>
+                        )}
+                      </NotificationText>
+                      <NotificationTime>
+                        {new Date(notification.timestamp).toLocaleString()}
+                      </NotificationTime>
+                    </NotificationContent>
                   </NotificationItem>
                 ));
               })()}
@@ -1384,6 +1485,12 @@ const DoctorDashboard = () => {
                       <QueryTime>
                         <FaClock />
                         {formatDate(query.timestamp)}
+                        {query.isUrgent && (
+                          <UrgencyBadge>
+                            <FaBell style={{ marginRight: '0.25rem' }} />
+                            URGENT
+                          </UrgencyBadge>
+                        )}
                       </QueryTime>
                       <QueryPatient>
                         {query.patientName || 'Anonymous Patient'}

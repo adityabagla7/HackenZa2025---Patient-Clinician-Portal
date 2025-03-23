@@ -35,6 +35,7 @@ export interface Notification {
   relatedId: string;
   text: string;
   isRead: boolean;
+  isUrgent?: boolean;
 }
 
 // Save notifications to localStorage
