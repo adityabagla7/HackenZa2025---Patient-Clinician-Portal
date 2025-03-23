@@ -1874,10 +1874,6 @@ const PatientDashboard = () => {
                     {item.responseStatus === 'success' && item.aiResponse && (
                       <AIResponseContent>
                         <SimpleMarkdown content={item.aiResponse} />
-                        {!item.aiResponse.includes('*') && !item.aiResponse.includes('#') && 
-                          !item.aiResponse.includes('`') && !item.aiResponse.includes('-') && (
-                          <div>{item.aiResponse}</div>
-                        )}
                       </AIResponseContent>
                     )}
                   </AIResponseContainer>
@@ -1958,10 +1954,6 @@ const PatientDashboard = () => {
                         {item.aiResponse && (
                           <AIResponseContent>
                             <SimpleMarkdown content={item.aiResponse} />
-                            {!item.aiResponse.includes('*') && !item.aiResponse.includes('#') && 
-                              !item.aiResponse.includes('`') && !item.aiResponse.includes('-') && (
-                              <div>{item.aiResponse}</div>
-                            )}
                           </AIResponseContent>
                         )}
                       </AIResponseContainer>
