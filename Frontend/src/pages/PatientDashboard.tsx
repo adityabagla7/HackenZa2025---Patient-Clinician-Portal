@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { FaCheckCircle, FaClock, FaCommentMedical, FaFile, FaFileUpload, FaMicrophone, FaPaperPlane, FaStop, FaTimes, FaBell } from 'react-icons/fa'
+import { FaBell, FaCheckCircle, FaClock, FaCommentMedical, FaFile, FaFileUpload, FaMicrophone, FaPaperPlane, FaStop, FaTimes } from 'react-icons/fa'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
-import { getAIResponse, saveNotification, getUnreadNotificationsCount, getNotifications, markNotificationAsRead } from '../services/api'
+import { getAIResponse, getNotifications, getUnreadNotificationsCount, markNotificationAsRead, saveNotification } from '../services/api'
 // import ReactMarkdown from 'react-markdown' // Uncomment after package is installed
 
 const PageTitle = styled.h1`

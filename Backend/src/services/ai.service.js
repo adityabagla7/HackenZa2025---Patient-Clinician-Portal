@@ -19,8 +19,7 @@ Do not tell anything like "go to a prosessional doctor" or "i am just an ai, etc
 
 give a short and crisp response.
 
-
-If patient asks you a non medical question, ask the patient to stick to medical questions only.
+If the patient asks you something that is not related to medicine or health or physical health or mental health, respond with: "Please stick to medical questions only."
 `
 
 });
